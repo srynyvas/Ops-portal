@@ -1,322 +1,269 @@
-  // Main render - Return the complete interface
-  if (currentView === 'catalogue') {
-    return (
-      <div className="w-full h-screen bg-gray-50">
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Rocket size={28} className="text-purple-600" />
-                Release Management
-              </h1>
-              <p className="text-gray-600 mt-1">Manage software releases, features, and tasks</p>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setCatalogueView(catalogueView === 'grid' ? 'list' : 'grid')}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                title={`Switch to ${catalogueView === 'grid' ? 'list' : 'grid'} view`}
-              >
-                {catalogueView === 'grid' ? <List size={20} /> : <Grid size={20} />}
-              </button>
-              
-              <button
-                onClick={createNewRelease}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
-              >
-                <Plus size={20} />
-                New Release
-              </button>
-            </div>
-          </div>
-
-          {/* Search and Filter */}
-          <div className="flex items-center gap-4 mt-4">
-            <div className="relative flex-1 max-w-md">
-              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search releases..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        
-        <div className="px-6 py-6">
-          {filteredReleases.length === 0 ? (
-            <div className="text-center py-12">
-              <Rocket size={48} className="mx-auto text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">
-                {searchQuery || selectedCategory !== 'all' ? 'No releases found' : 'No releases yet'}
-              </h3>
-              <p className="text-gray-500 mb-6">
-                {searchQuery || selectedCategory !== 'all' 
-                  ? 'Try adjusting your search or filters' 
-                  : 'Create your first release to get started'}
-              </p>
-              <button
-                onClick={createNewRelease}
-                className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
-              >
-                Create New Release
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-gray-600">
-                  {filteredReleases.length} release{filteredReleases.length !== 1 ? 's' : ''} found
-                </p>
+        {/* Save Dialog */}
+        {showSaveDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-800">Save Release</h3>
+                <button
+                  onClick={() => {
+                    setShowSaveDialog(false);
+                    setFormErrors({});
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              {catalogueView === 'grid' ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredReleases.map(release => (
-                    <div key={release.id} className={`bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-200 hover:shadow-lg ${
-                      release.status === 'closed' ? 'opacity-60 bg-gray-50' : ''
-                    }`}>
-                      <div className="p-6">
-                        <div className="flex items-start justify-between mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h3 className={`text-lg font-semibold ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-800'}`}>
-                                {release.name}
-                              </h3>
-                              <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                                release.status === 'closed' ? 'bg-gray-200 text-gray-600' : 'bg-purple-100 text-purple-700'
-                              }`}>
-                                v{release.version}
-                              </span>
-                              {release.status === 'closed' && (
-                                <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
-                                  Closed
-                                </span>
-                              )}
-                            </div>
-                            <p className={`text-sm line-clamp-2 ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-600'}`}>
-                              {release.description}
-                            </p>
-                          </div>
-                          
-                          <div className="flex items-center gap-1 ml-4">
-                            <button
-                              onClick={() => loadRelease(release)}
-                              className={`p-2 rounded-lg transition-colors ${
-                                release.status === 'closed' 
-                                  ? 'text-orange-600 hover:bg-orange-50' 
-                                  : 'text-purple-600 hover:bg-purple-50'
-                              }`}
-                              title={release.status === 'closed' ? 'Reopen release' : 'Open release'}
-                            >
-                              <Eye size={16} />
-                            </button>
-                            <button
-                              onClick={() => duplicateRelease(release)}
-                              className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                              title="Duplicate release"
-                            >
-                              <Copy size={16} />
-                            </button>
-                            {release.status !== 'closed' && (
-                              <button
-                                onClick={() => {
-                                  setSelectedReleaseId(release.id);
-                                  setShowCloseDialog(true);
-                                }}
-                                className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-                                title="Close release"
-                              >
-                                <X size={16} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Progress and Environment */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                            <span>Progress</span>
-                            <span>{release.completion || 0}% complete</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className={`h-2 rounded-full transition-all duration-300 ${release.status === 'closed' ? 'bg-gray-400' : 'bg-purple-600'}`}
-                              style={{ width: `${release.completion || 0}%` }}
-                            />
-                          </div>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className={`px-2 py-1 text-xs rounded-full ${
-                              environments.find(e => e.id === release.environment)?.color || 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {environments.find(e => e.id === release.environment)?.name || release.environment}
-                            </span>
-                            {release.targetDate && (
-                              <span className="text-xs text-gray-500">
-                                Target: {new Date(release.targetDate).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Preview */}
-                        <div className={`rounded-lg p-3 mb-3 ${release.status === 'closed' ? 'bg-gray-100' : 'bg-gray-50'}`}>
-                          <div className="text-xs text-gray-600 mb-2">Features</div>
-                          <div className="text-sm">
-                            <div className={`font-medium mb-1 ${release.status === 'closed' ? 'text-gray-500' : 'text-purple-600'}`}>
-                              {release.preview.centralNode}
-                            </div>
-                            {release.preview.branches.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {release.preview.branches.map((branch, index) => (
-                                  <span key={index} className={`px-2 py-1 rounded text-xs ${
-                                    release.status === 'closed' 
-                                      ? 'bg-gray-200 text-gray-500' 
-                                      : 'bg-white text-gray-600'
-                                  }`}>
-                                    {branch}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Tags and metadata */}
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                          <div className="flex flex-wrap gap-1">
-                            {release.tags.slice(0, 3).map((tag, index) => (
-                              <span key={index} className={`px-2 py-1 rounded ${
-                                release.status === 'closed' 
-                                  ? 'bg-gray-200 text-gray-600' 
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {tag}
-                              </span>
-                            ))}
-                            {release.tags.length > 3 && (
-                              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                                +{release.tags.length - 3}
-                              </span>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-3">
-                            <span>{release.nodeCount} items</span>
-                            <span>{new Date(release.updatedAt).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Release Name</label>
+                  <input
+                    type="text"
+                    value={saveFormData.name}
+                    onChange={(e) => {
+                      setSaveFormData(prev => ({ ...prev, name: e.target.value }));
+                      if (formErrors.name) {
+                        setFormErrors(prev => ({ ...prev, name: '' }));
+                      }
+                    }}
+                    placeholder="Enter release name"
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                      formErrors.name ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.name && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                  )}
                 </div>
-              ) : (
-                <div className="space-y-4">
-                  {filteredReleases.map(release => (
-                    <div key={release.id} className={`bg-white border border-gray-200 rounded-lg p-4 hover:border-gray-300 transition-all ${
-                      release.status === 'closed' ? 'opacity-60 bg-gray-50' : ''
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h3 className={`text-lg font-semibold ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-800'}`}>
-                              {release.name}
-                            </h3>
-                            <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                              release.status === 'closed' ? 'bg-gray-200 text-gray-600' : 'bg-purple-100 text-purple-700'
-                            }`}>
-                              v{release.version}
-                            </span>
-                            {release.status === 'closed' && (
-                              <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
-                                Closed
-                              </span>
-                            )}
-                            <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
-                              {release.nodeCount} items
-                            </span>
-                            <span className={`px-2 py-1 text-xs rounded ${
-                              environments.find(e => e.id === release.environment)?.color || 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {environments.find(e => e.id === release.environment)?.name || release.environment}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {release.completion || 0}% complete
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {new Date(release.updatedAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <p className={`text-sm mt-1 ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-600'}`}>
-                            {release.description}
-                          </p>
-                          <div className="flex gap-1 mt-2">
-                            {release.tags.slice(0, 5).map((tag, index) => (
-                              <span key={index} className={`px-2 py-1 text-xs rounded ${
-                                release.status === 'closed' 
-                                  ? 'bg-gray-200 text-gray-600' 
-                                  : 'bg-blue-100 text-blue-700'
-                              }`}>
-                                {tag}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => loadRelease(release)}
-                            className={`px-3 py-1.5 text-sm rounded transition-colors ${
-                              release.status === 'closed' 
-                                ? 'bg-orange-600 text-white hover:bg-orange-700' 
-                                : 'bg-purple-600 text-white hover:bg-purple-700'
-                            }`}
-                          >
-                            {release.status === 'closed' ? 'Re-Open' : 'Open'}
-                          </button>
-                          <button
-                            onClick={() => duplicateRelease(release)}
-                            className="p-2 text-gray-600 hover:bg-gray-50 rounded transition-colors"
-                            title="Duplicate"
-                          >
-                            <Copy size={16} />
-                          </button>
-                          {release.status !== 'closed' && (
-                            <button
-                              onClick={() => {
-                                setSelectedReleaseId(release.id);
-                                setShowCloseDialog(true);
-                              }}
-                              className="p-2 text-gray-600 hover:bg-gray-50 rounded transition-colors"
-                              title="Close release"
-                            >
-                              <X size={16} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
+                  <input
+                    type="text"
+                    value={saveFormData.version}
+                    onChange={(e) => {
+                      setSaveFormData(prev => ({ ...prev, version: e.target.value }));
+                      if (formErrors.version) {
+                        setFormErrors(prev => ({ ...prev, version: '' }));
+                      }
+                    }}
+                    placeholder="e.g., 1.0.0"
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                      formErrors.version ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.version && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.version}</p>
+                  )}
                 </div>
-              )}
-            </>
-          )}
-        </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <textarea
+                    value={saveFormData.description}
+                    onChange={(e) => setSaveFormData(prev => ({ ...prev, description: e.target.value }))}
+                    placeholder="Describe this release"
+                    rows="3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select
+                      value={saveFormData.category}
+                      onChange={(e) => setSaveFormData(prev => ({ ...prev, category: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      {categories.filter(c => c.id !== 'all').map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
+                    <select
+                      value={saveFormData.environment}
+                      onChange={(e) => setSaveFormData(prev => ({ ...prev, environment: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    >
+                      {environments.map(env => (
+                        <option key={env.id} value={env.id}>
+                          {env.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+                  <input
+                    type="date"
+                    value={saveFormData.targetDate}
+                    onChange={(e) => {
+                      setSaveFormData(prev => ({ ...prev, targetDate: e.target.value }));
+                      if (formErrors.targetDate) {
+                        setFormErrors(prev => ({ ...prev, targetDate: '' }));
+                      }
+                    }}
+                    className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                      formErrors.targetDate ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.targetDate && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.targetDate}</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={saveCurrentRelease}
+                  className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+                >
+                  Save Release
+                </button>
+                <button
+                  onClick={() => {
+                    setShowSaveDialog(false);
+                    setFormErrors({});
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Close Dialog */}
+        {showCloseDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-800">Close Release</h3>
+                <button
+                  onClick={() => {
+                    setShowCloseDialog(false);
+                    setSelectedReleaseId(null);
+                    setCloseReason('');
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-gray-700 mb-4">
+                  This release will be closed and no longer editable. You can reopen it later if needed.
+                </p>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for closing <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    placeholder="e.g., Release deployed to production, Project cancelled, Moving to next version..."
+                    rows="3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={closeRelease}
+                  disabled={!closeReason.trim()}
+                  className="flex-1 bg-gray-600 text-white py-2 px-4 rounded-lg hover:bg-gray-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  Close Release
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCloseDialog(false);
+                    setSelectedReleaseId(null);
+                    setCloseReason('');
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Reopen Dialog */}
+        {showReopenDialog && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-bold text-gray-800">Reopen Release</h3>
+                <button
+                  onClick={() => {
+                    setShowReopenDialog(false);
+                    setSelectedReleaseId(null);
+                    setReopenReason('');
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="mb-4">
+                <p className="text-gray-700 mb-4">
+                  This release is currently closed. To reopen and enable editing, please provide a reason.
+                </p>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Reason for reopening <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={reopenReason}
+                    onChange={(e) => setReopenReason(e.target.value)}
+                    placeholder="e.g., Need to add hotfix, Found additional requirements, Continuing development..."
+                    rows="3"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={reopenRelease}
+                  disabled={!reopenReason.trim()}
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+                >
+                  Reopen Release
+                </button>
+                <button
+                  onClick={() => {
+                    setShowReopenDialog(false);
+                    setSelectedReleaseId(null);
+                    setReopenReason('');
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -435,6 +382,151 @@
               </button>
               <button
                 onClick={cancelDelete}
+                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Dialog in Editor */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-800">Save Release</h3>
+              <button
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setFormErrors({});
+                }}
+                className="p-1 hover:bg-gray-100 rounded"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Release Name</label>
+                <input
+                  type="text"
+                  value={saveFormData.name}
+                  onChange={(e) => {
+                    setSaveFormData(prev => ({ ...prev, name: e.target.value }));
+                    if (formErrors.name) {
+                      setFormErrors(prev => ({ ...prev, name: '' }));
+                    }
+                  }}
+                  placeholder="Enter release name"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    formErrors.name ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                />
+                {formErrors.name && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
+                <input
+                  type="text"
+                  value={saveFormData.version}
+                  onChange={(e) => {
+                    setSaveFormData(prev => ({ ...prev, version: e.target.value }));
+                    if (formErrors.version) {
+                      setFormErrors(prev => ({ ...prev, version: '' }));
+                    }
+                  }}
+                  placeholder="e.g., 1.0.0"
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    formErrors.version ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                />
+                {formErrors.version && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.version}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <textarea
+                  value={saveFormData.description}
+                  onChange={(e) => setSaveFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Describe this release"
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                  <select
+                    value={saveFormData.category}
+                    onChange={(e) => setSaveFormData(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {categories.filter(c => c.id !== 'all').map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
+                  <select
+                    value={saveFormData.environment}
+                    onChange={(e) => setSaveFormData(prev => ({ ...prev, environment: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {environments.map(env => (
+                      <option key={env.id} value={env.id}>
+                        {env.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+                <input
+                  type="date"
+                  value={saveFormData.targetDate}
+                  onChange={(e) => {
+                    setSaveFormData(prev => ({ ...prev, targetDate: e.target.value }));
+                    if (formErrors.targetDate) {
+                      setFormErrors(prev => ({ ...prev, targetDate: '' }));
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                    formErrors.targetDate ? 'border-red-300' : 'border-gray-300'
+                  }`}
+                />
+                {formErrors.targetDate && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.targetDate}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={saveCurrentRelease}
+                className="flex-1 bg-purple-600 text-white py-2 px-4 rounded-lg hover:bg-purple-700 transition-colors font-medium"
+              >
+                Save Release
+              </button>
+              <button
+                onClick={() => {
+                  setShowSaveDialog(false);
+                  setFormErrors({});
+                }}
                 className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
               >
                 Cancel
