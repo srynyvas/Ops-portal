@@ -6,7 +6,7 @@ export const APP_CONFIG = {
 } as const;
 
 export const API_ENDPOINTS = {
-  BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:3001',
+  BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
   DASHBOARD: '/api/dashboard',
   WORKFLOWS: '/api/workflows',
   RELEASES: '/api/releases',
