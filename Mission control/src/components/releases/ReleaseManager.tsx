@@ -111,3 +111,63 @@ const VERTICAL_SPACING = 40;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2.0;
 const ZOOM_STEP = 0.1;
+
+// Sample data constants
+const categories = [
+  { id: 'all', name: 'All Categories' },
+  { id: 'web', name: 'Web Application' },
+  { id: 'mobile', name: 'Mobile App' },
+  { id: 'api', name: 'API/Backend' },
+  { id: 'infrastructure', name: 'Infrastructure' },
+  { id: 'security', name: 'Security' },
+  { id: 'feature', name: 'Feature Release' },
+  { id: 'hotfix', name: 'Hotfix' },
+  { id: 'maintenance', name: 'Maintenance' }
+];
+
+const environments = [
+  { id: 'development', name: 'Development' },
+  { id: 'staging', name: 'Staging' },
+  { id: 'production', name: 'Production' },
+  { id: 'testing', name: 'Testing' }
+];
+
+const priorities = [
+  { id: 'low', name: 'Low', color: 'bg-green-100 text-green-800' },
+  { id: 'medium', name: 'Medium', color: 'bg-yellow-100 text-yellow-800' },
+  { id: 'high', name: 'High', color: 'bg-orange-100 text-orange-800' },
+  { id: 'critical', name: 'Critical', color: 'bg-red-100 text-red-800' }
+];
+
+const statuses = [
+  { id: 'planning', name: 'Planning', color: 'bg-blue-100 text-blue-800' },
+  { id: 'in-progress', name: 'In Progress', color: 'bg-purple-100 text-purple-800' },
+  { id: 'review', name: 'Review', color: 'bg-orange-100 text-orange-800' },
+  { id: 'testing', name: 'Testing', color: 'bg-yellow-100 text-yellow-800' },
+  { id: 'completed', name: 'Completed', color: 'bg-green-100 text-green-800' },
+  { id: 'blocked', name: 'Blocked', color: 'bg-red-100 text-red-800' }
+];
+
+const defaultColors = [
+  'bg-purple-600', 'bg-blue-600', 'bg-green-600', 'bg-yellow-600', 
+  'bg-red-600', 'bg-pink-600', 'bg-indigo-600', 'bg-teal-600'
+];
+
+const defaultIcons = ['Rocket', 'Package', 'CheckSquare', 'Target', 'Users', 'GitBranch', 'Clock'];
+
+const ReleaseManager: React.FC = () => {
+  // State management
+  const [currentView, setCurrentView] = useState<'catalogue' | 'editor'>('catalogue');
+  const [catalogueViewMode, setCatalogueViewMode] = useState<'grid' | 'list'>('grid');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [releases, setReleases] = useState<Release[]>([]);
+  
+  // Viewport state for mind map
+  const [viewport, setViewport] = useState<ViewportState>({
+    zoom: 1,
+    panX: 0,
+    panY: 0,
+    isDragging: false,
+    lastMousePos: { x: 0, y: 0 }
+  });
