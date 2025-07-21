@@ -410,3 +410,73 @@ const ReleaseManagementTool = () => {
       branches: centralNode.children ? centralNode.children.map(c => c.title).slice(0, 4) : []
     };
   };
+
+  // Filter releases
+  const filteredReleases = savedReleases.filter(release => {
+    const matchesSearch = release.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         release.version.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         release.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         release.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesCategory = selectedCategory === 'all' || release.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
+  });
+
+  // Node management functions (similar to original but adapted for releases)
+  const findNodeById = (nodes, id) => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findNodeById(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const updateNodeById = (nodes, id, updates) => {
+    return nodes.map(node => {
+      if (node.id === id) {
+        return { ...node, ...updates };
+      }
+      if (node.children) {
+        return { ...node, children: updateNodeById(node.children, id, updates) };
+      }
+      return node;
+    });
+  };
+
+  const removeNodeById = (nodes, id) => {
+    return nodes.filter(node => {
+      if (node.id === id) return false;
+      if (node.children) {
+        node.children = removeNodeById(node.children, id);
+      }
+      return true;
+    });
+  };
+
+  const addNodeToParent = (nodes, parentId, newNode) => {
+    return nodes.map(node => {
+      if (node.id === parentId) {
+        return {
+          ...node,
+          children: [...node.children, newNode],
+          expanded: true
+        };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: addNodeToParent(node.children, parentId, newNode)
+        };
+      }
+      return node;
+    });
+  };
+
+  const countTotalChildren = (node) => {
+    if (!node.children || node.children.length === 0) return 0;
+    return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
+  };
