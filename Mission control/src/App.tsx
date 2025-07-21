@@ -35,7 +35,7 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
   {
     id: 'workflows',
     label: 'Workflows',
-    icon: 'Workflow',
+    icon: 'Activity',
     path: '/workflows',
     description: 'Mind map workflows',
   },
@@ -96,7 +96,6 @@ const App: React.FC = () => {
   // Initialize keyboard shortcuts
   useKeyboardShortcuts({
     onSearch: () => {
-      // TODO: Implement global search
       console.log('Global search triggered');
     },
     onNewWorkflow: () => {
@@ -115,14 +114,14 @@ const App: React.FC = () => {
 
   // Load application state from localStorage
   useEffect(() => {
-    const savedState = localStorage.getItem('mission-control-view-state');
-    if (savedState) {
-      try {
+    try {
+      const savedState = localStorage.getItem('mission-control-view-state');
+      if (savedState) {
         const parsed = JSON.parse(savedState);
         setViewState(prev => ({ ...prev, ...parsed }));
-      } catch (error) {
-        console.warn('Failed to parse saved view state:', error);
       }
+    } catch (error) {
+      console.warn('Failed to parse saved view state:', error);
     }
     setIsLoading(false);
   }, []);
@@ -130,7 +129,11 @@ const App: React.FC = () => {
   // Save view state to localStorage
   useEffect(() => {
     if (!isLoading) {
-      localStorage.setItem('mission-control-view-state', JSON.stringify(viewState));
+      try {
+        localStorage.setItem('mission-control-view-state', JSON.stringify(viewState));
+      } catch (error) {
+        console.warn('Failed to save view state:', error);
+      }
     }
   }, [viewState, isLoading]);
 
@@ -148,31 +151,44 @@ const App: React.FC = () => {
   };
 
   const renderCurrentPage = () => {
-    switch (viewState.currentPage) {
-      case 'dashboard':
-        return <Dashboard viewState={viewState} onUpdateViewState={updateViewState} />;
-      case 'workflows':
-        return <WorkflowManager viewState={viewState} onUpdateViewState={updateViewState} />;
-      case 'releases':
-        return <ReleaseManager viewState={viewState} onUpdateViewState={updateViewState} />;
-      case 'services':
-      case 'pipelines':
-      case 'monitoring':
-      case 'documentation':
-      case 'teams':
-      case 'incidents':
-        return (
-          <div className="flex flex-col items-center justify-center h-96 text-gray-500">
-            <div className="text-6xl mb-4">🚧</div>
-            <h2 className="text-2xl font-semibold mb-2">Coming Soon</h2>
-            <p className="text-center max-w-md">
-              The {NAVIGATION_ITEMS.find(item => item.id === viewState.currentPage)?.label} section 
-              is currently under development. Check back soon for updates!
-            </p>
-          </div>
-        );
-      default:
-        return <Dashboard viewState={viewState} onUpdateViewState={updateViewState} />;
+    try {
+      switch (viewState.currentPage) {
+        case 'dashboard':
+          return <Dashboard viewState={viewState} onUpdateViewState={updateViewState} />;
+        case 'workflows':
+          return <WorkflowManager viewState={viewState} onUpdateViewState={updateViewState} />;
+        case 'releases':
+          return <ReleaseManager viewState={viewState} onUpdateViewState={updateViewState} />;
+        case 'services':
+        case 'pipelines':
+        case 'monitoring':
+        case 'documentation':
+        case 'teams':
+        case 'incidents':
+          return (
+            <div className="flex flex-col items-center justify-center h-96 text-gray-500">
+              <div className="text-6xl mb-4">🚧</div>
+              <h2 className="text-2xl font-semibold mb-2">Coming Soon</h2>
+              <p className="text-center max-w-md">
+                The {NAVIGATION_ITEMS.find(item => item.id === viewState.currentPage)?.label} section 
+                is currently under development. Check back soon for updates!
+              </p>
+            </div>
+          );
+        default:
+          return <Dashboard viewState={viewState} onUpdateViewState={updateViewState} />;
+      }
+    } catch (error) {
+      console.error('Error rendering page:', error);
+      return (
+        <div className="flex flex-col items-center justify-center h-96 text-red-500">
+          <div className="text-6xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-semibold mb-2">Error</h2>
+          <p className="text-center max-w-md">
+            Something went wrong loading this page. Please try refreshing.
+          </p>
+        </div>
+      );
     }
   };
 
