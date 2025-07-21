@@ -621,3 +621,124 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
   const cancelDelete = () => {
     setDeleteConfirm(null);
   };
+
+  // Node property management functions
+  const updateNodeStyle = (nodeId: string, updates: Partial<ReleaseNode>) => {
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: updateNodeById(prev.nodes, nodeId, updates),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const updateNodeProperties = (nodeId: string, propertyUpdates: Partial<ReleaseNode['properties']>) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: updateNodeById(prev.nodes, nodeId, { 
+          properties: { ...node.properties, ...propertyUpdates }
+        }),
+        updatedAt: new Date().toISOString()
+      }));
+    }
+  };
+
+  const addTag = (nodeId: string, tagText: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node && tagText.trim() && !node.properties.tags.includes(tagText.trim())) {
+      updateNodeProperties(nodeId, { 
+        tags: [...node.properties.tags, tagText.trim()] 
+      });
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (nodeId: string, tagToRemove: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      updateNodeProperties(nodeId, { 
+        tags: node.properties.tags.filter(tag => tag !== tagToRemove)
+      });
+    }
+  };
+
+  const addDependency = (nodeId: string, depText: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node && depText.trim() && !node.properties.dependencies.includes(depText.trim())) {
+      updateNodeProperties(nodeId, { 
+        dependencies: [...node.properties.dependencies, depText.trim()] 
+      });
+      setNewDependency('');
+    }
+  };
+
+  const removeDependency = (nodeId: string, depToRemove: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      updateNodeProperties(nodeId, { 
+        dependencies: node.properties.dependencies.filter(dep => dep !== depToRemove)
+      });
+    }
+  };
+
+  // Render functions - Catalogue header
+  const renderCatalogueHeader = () => (
+    <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Rocket size={28} className="text-purple-600" />
+            Release Management
+          </h1>
+          <p className="text-gray-600 mt-1">Manage software releases, features, and tasks</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => handleViewModeChange(viewState.viewMode === 'grid' ? 'list' : 'grid')}
+            className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            title={`Switch to ${viewState.viewMode === 'grid' ? 'list' : 'grid'} view`}
+          >
+            {viewState.viewMode === 'grid' ? <List size={20} /> : <Grid size={20} />}
+          </button>
+          
+          <button
+            onClick={createNewRelease}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+          >
+            <Plus size={20} />
+            New Release
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Filter */}
+      <div className="flex items-center gap-4 mt-4">
+        <div className="relative flex-1 max-w-md">
+          <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={viewState.searchQuery}
+            onChange={(e) => handleSearch(e.target.value)}
+            placeholder="Search releases..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <select
+          value={viewState.activeFilters.category || 'all'}
+          onChange={(e) => onUpdateViewState({ 
+            activeFilters: { ...viewState.activeFilters, category: e.target.value }
+          })}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          {categories.map(category => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
