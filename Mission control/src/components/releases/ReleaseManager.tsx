@@ -480,3 +480,189 @@ const ReleaseManagementTool = () => {
     if (!node.children || node.children.length === 0) return 0;
     return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
   };
+
+  // Editor functions
+  const handleDragStart = (e, node) => {
+    setDraggedNode(node);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  const handleDragOver = (e, node) => {
+    e.preventDefault();
+    if (draggedNode && draggedNode.id !== node.id && node.type !== 'task') {
+      setDropTarget(node.id);
+    }
+  };
+
+  const handleDrop = (e, targetNode) => {
+    e.preventDefault();
+    if (!draggedNode || draggedNode.id === targetNode.id || targetNode.type === 'task') return;
+
+    let newNodes = removeNodeById(currentRelease.nodes, draggedNode.id);
+    newNodes = addNodeToParent(newNodes, targetNode.id, draggedNode);
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: newNodes,
+      updatedAt: new Date().toISOString()
+    }));
+    
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  const toggleExpanded = (nodeId) => {
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: updateNodeById(prev.nodes, nodeId, { 
+        expanded: !findNodeById(prev.nodes, nodeId).expanded 
+      }),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const startEditing = (node) => {
+    setEditingNode(node.id);
+    setEditValue(node.title);
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim()) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: updateNodeById(prev.nodes, editingNode, { title: editValue.trim() }),
+        updatedAt: new Date().toISOString()
+      }));
+    }
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const cancelEdit = () => {
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const addNewNode = (parentId) => {
+    const parent = findNodeById(currentRelease.nodes, parentId);
+    let newNodeType, newColor, newIcon;
+    
+    if (parent?.type === 'release') {
+      newNodeType = 'feature';
+      newColor = 'bg-blue-600';
+      newIcon = 'Package';
+    } else if (parent?.type === 'feature') {
+      newNodeType = 'task';
+      newColor = 'bg-gray-500';
+      newIcon = 'Code';
+    } else {
+      return; // Can't add children to tasks
+    }
+    
+    const newNode = {
+      id: Date.now().toString(),
+      title: newNodeType === 'feature' ? 'New Feature' : 'New Task',
+      type: newNodeType,
+      color: newColor,
+      icon: newIcon,
+      properties: {
+        version: '', assignee: '', targetDate: '', environment: 'development',
+        description: '', tags: [], priority: 'medium', status: 'planning',
+        storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+      },
+      children: []
+    };
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: addNodeToParent(prev.nodes, parentId, newNode),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const confirmDelete = (nodeId) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (!node) return;
+
+    const childCount = countTotalChildren(node);
+    setDeleteConfirm({ nodeId, node, childCount });
+  };
+
+  const executeDelete = () => {
+    if (deleteConfirm) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: removeNodeById(prev.nodes, deleteConfirm.nodeId),
+        updatedAt: new Date().toISOString()
+      }));
+      setDeleteConfirm(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirm(null);
+  };
+
+  const updateNodeStyle = (nodeId, updates) => {
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: updateNodeById(prev.nodes, nodeId, updates),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const updateNodeProperties = (nodeId, propertyUpdates) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: updateNodeById(prev.nodes, nodeId, { 
+          properties: { ...node.properties, ...propertyUpdates }
+        }),
+        updatedAt: new Date().toISOString()
+      }));
+    }
+  };
+
+  const addTag = (nodeId, tagText) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node && tagText.trim() && !node.properties.tags.includes(tagText.trim())) {
+      updateNodeProperties(nodeId, { 
+        tags: [...node.properties.tags, tagText.trim()] 
+      });
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (nodeId, tagToRemove) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      updateNodeProperties(nodeId, { 
+        tags: node.properties.tags.filter(tag => tag !== tagToRemove)
+      });
+    }
+  };
+
+  const addDependency = (nodeId, depText) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node && depText.trim() && !node.properties.dependencies.includes(depText.trim())) {
+      updateNodeProperties(nodeId, { 
+        dependencies: [...node.properties.dependencies, depText.trim()] 
+      });
+      setNewDependency('');
+    }
+  };
+
+  const removeDependency = (nodeId, depToRemove) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (node) {
+      updateNodeProperties(nodeId, { 
+        dependencies: node.properties.dependencies.filter(dep => dep !== depToRemove)
+      });
+    }
+  };
