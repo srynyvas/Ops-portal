@@ -166,3 +166,51 @@ const ReleaseManagementTool = () => {
   const [activeTab, setActiveTab] = useState('visual');
   const [newTag, setNewTag] = useState('');
   const [newDependency, setNewDependency] = useState('');
+
+  const colorOptions = [
+    'bg-red-600', 'bg-pink-600', 'bg-purple-600', 'bg-indigo-600',
+    'bg-blue-600', 'bg-cyan-600', 'bg-teal-600', 'bg-green-600',
+    'bg-lime-600', 'bg-yellow-600', 'bg-orange-600', 'bg-gray-600',
+    'bg-red-400', 'bg-pink-400', 'bg-purple-400', 'bg-indigo-400',
+    'bg-blue-400', 'bg-cyan-400', 'bg-teal-400', 'bg-green-400'
+  ];
+
+  const releaseIcons = {
+    'Rocket': Rocket, 'Package': Package, 'GitBranch': GitBranch, 'Code': Code,
+    'Bug': Bug, 'Shield': Shield, 'Target': Target, 'CheckCircle': CheckCircle,
+    'AlertCircle': AlertCircle, 'Play': Play, 'Pause': Pause, 'RotateCcw': RotateCcw,
+    'TrendingUp': TrendingUp, 'Layers': Layers, 'Terminal': Terminal, 'Users': Users,
+    'Zap': Zap, 'Star': Star
+  };
+
+  const categories = [
+    { id: 'all', name: 'All Releases', icon: FolderOpen },
+    { id: 'major', name: 'Major Release', icon: Rocket },
+    { id: 'minor', name: 'Minor Release', icon: Package },
+    { id: 'patch', name: 'Patch Release', icon: Code },
+    { id: 'hotfix', name: 'Hotfix', icon: Bug },
+    { id: 'beta', name: 'Beta Release', icon: GitBranch }
+  ];
+
+  const environments = [
+    { id: 'development', name: 'Development', color: 'bg-blue-100 text-blue-800' },
+    { id: 'staging', name: 'Staging', color: 'bg-yellow-100 text-yellow-800' },
+    { id: 'production', name: 'Production', color: 'bg-green-100 text-green-800' }
+  ];
+
+  const priorityColors = {
+    'low': 'bg-green-100 text-green-800',
+    'medium': 'bg-yellow-100 text-yellow-800', 
+    'high': 'bg-orange-100 text-orange-800',
+    'critical': 'bg-red-100 text-red-800'
+  };
+
+  const statusColors = {
+    'planning': 'bg-gray-100 text-gray-800',
+    'in-development': 'bg-blue-100 text-blue-800',
+    'testing': 'bg-purple-100 text-purple-800',
+    'ready-for-release': 'bg-green-100 text-green-800',
+    'released': 'bg-emerald-100 text-emerald-800',
+    'blocked': 'bg-red-100 text-red-800',
+    'on-hold': 'bg-gray-100 text-gray-800'
+  };
