@@ -1,162 +1,101 @@
-import { BaseEntity, Priority, Status, Environment, StatusHistory, User } from './common';
-
-export interface SystemMetrics {
-  activeServices: number;
-  deploymentsToday: number;
-  systemHealth: number;
-  openIncidents: number;
-  cpuUsage: number;
-  memoryUsage: number;
-  networkIO: number;
+// Additional dashboard types that were referenced in data file
+export interface DashboardMetric {
+  id: string;
+  title: string;
+  value: number;
+  change: number;
+  changeType: 'increase' | 'decrease' | 'neutral';
+  period: 'hour' | 'day' | 'week' | 'month';
+  icon: string;
+  color: string;
+  format?: 'number' | 'percentage' | 'currency' | 'bytes';
 }
 
-export interface Service {
-  id: string;
-  name: string;
-  version: string;
-  status: 'healthy' | 'degraded' | 'down';
-  type: 'microservice' | 'api' | 'database' | 'queue';
-  environment: Environment;
-  url?: string;
-  description?: string;
-  owner?: string;
-  lastDeployed?: string;
-  healthChecks: HealthCheck[];
-}
-
-export interface HealthCheck {
-  id: string;
-  name: string;
-  status: 'passing' | 'warning' | 'critical';
-  lastCheck: string;
+export interface SystemStatus {
+  overall: 'operational' | 'degraded' | 'outage';
+  uptime: number;
   responseTime: number;
-  message?: string;
+  services: ServiceStatus[];
 }
 
-export interface Pipeline {
+export interface ServiceStatus {
   id: string;
   name: string;
-  branch: string;
-  status: 'running' | 'success' | 'failed' | 'queued' | 'cancelled';
-  duration: string;
-  startedAt: string;
-  finishedAt?: string;
-  triggeredBy: string;
-  commit?: {
-    id: string;
-    message: string;
-    author: string;
-  };
-  stages: PipelineStage[];
+  status: 'operational' | 'degraded' | 'outage';
+  uptime: number;
+  responseTime: number;
+  description?: string;
+  lastIncident?: string;
 }
 
-export interface PipelineStage {
+export interface ActivityItem {
   id: string;
-  name: string;
-  status: 'pending' | 'running' | 'success' | 'failed' | 'skipped';
-  duration?: string;
-  logs?: string;
-  artifacts?: string[];
-}
-
-export interface Deployment {
-  id: string;
-  service: string;
-  version: string;
-  environment: Environment;
-  status: 'pending' | 'deploying' | 'success' | 'failed' | 'rolled-back';
-  deployedBy: string;
-  deployedAt: string;
-  duration?: string;
-  rollbackVersion?: string;
-}
-
-export interface Team {
-  id: string;
-  name: string;
-  description: string;
-  lead: User;
-  members: User[];
-  focus: string;
-  slackChannel?: string;
-  emailGroup?: string;
-  permissions: TeamPermission[];
-}
-
-export interface TeamPermission {
-  id: string;
-  resource: string;
-  actions: ('read' | 'write' | 'admin')[];
-  environment?: Environment;
-}
-
-export interface Incident extends BaseEntity {
+  type: 'deployment' | 'incident' | 'workflow' | 'release' | 'alert' | 'system';
   title: string;
   description: string;
-  severity: Priority;
-  status: 'open' | 'investigating' | 'in-progress' | 'monitoring' | 'resolved';
-  assignee?: User;
-  reporter: User;
-  affectedServices: string[];
-  timeline: IncidentTimelineEntry[];
-  resolution?: string;
-  postmortemUrl?: string;
-}
-
-export interface IncidentTimelineEntry {
-  id: string;
   timestamp: string;
-  action: string;
-  description: string;
-  user: User;
-  type: 'created' | 'updated' | 'assigned' | 'commented' | 'resolved';
+  status: 'success' | 'error' | 'warning' | 'info' | 'resolved';
+  icon: string;
+  user: string;
+  metadata?: Record<string, any>;
 }
 
-export interface Documentation {
+export interface Notification {
+  id: string;
+  type: 'info' | 'success' | 'warning' | 'error';
+  title: string;
+  message: string;
+  timestamp: string;
+  read: boolean;
+  actions?: NotificationAction[];
+}
+
+export interface NotificationAction {
+  id: string;
+  label: string;
+  action: () => void;
+  style: 'primary' | 'secondary' | 'danger';
+}
+
+export interface Widget {
+  id: string;
+  type: 'metric' | 'chart' | 'list' | 'status' | 'activity';
+  title: string;
+  size: 'small' | 'medium' | 'large';
+  position: { x: number; y: number };
+  config: Record<string, any>;
+  refreshInterval?: number;
+}
+
+export interface ChartData {
+  id: string;
+  label: string;
+  data: Array<{
+    x: string | number;
+    y: number;
+    label?: string;
+  }>;
+  color?: string;
+}
+
+export interface FilterOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
+export interface SortOption {
+  field: string;
+  label: string;
+  direction: 'asc' | 'desc';
+}
+
+export interface QuickAction {
   id: string;
   title: string;
-  type: 'api' | 'guide' | 'best-practice' | 'tutorial';
-  category: string;
-  content: string;
-  author: User;
-  lastUpdated: string;
-  tags: string[];
-  version: string;
-  status: 'draft' | 'published' | 'archived';
-  url?: string;
-}
-
-export interface ApiEndpoint {
-  id: string;
+  description: string;
+  icon: string;
+  color: string;
   path: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  description: string;
-  parameters: ApiParameter[];
-  responses: ApiResponse[];
-  examples: ApiExample[];
-  deprecated?: boolean;
-  version: string;
-}
-
-export interface ApiParameter {
-  name: string;
-  type: string;
-  required: boolean;
-  description: string;
-  example?: any;
-  enum?: string[];
-}
-
-export interface ApiResponse {
-  status: number;
-  description: string;
-  schema?: object;
-  example?: any;
-}
-
-export interface ApiExample {
-  name: string;
-  description: string;
-  request: object;
-  response: object;
+  permissions?: string[];
 }
