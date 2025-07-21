@@ -317,3 +317,96 @@ const ReleaseManagementTool = () => {
     setSelectedReleaseId(null);
     setReopenReason('');
   };
+
+  const createNewRelease = () => {
+    setCurrentRelease({
+      id: null,
+      name: 'New Release',
+      version: '1.0.0',
+      description: '',
+      category: 'minor',
+      tags: [],
+      targetDate: '',
+      environment: 'development',
+      status: 'active',
+      statusHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      nodes: [{
+        id: Date.now().toString(),
+        title: 'Release v1.0.0',
+        type: 'release',
+        color: 'bg-purple-600',
+        icon: 'Rocket',
+        expanded: true,
+        properties: {
+          version: '1.0.0', assignee: '', targetDate: '', environment: 'development',
+          description: '', tags: [], priority: 'medium', status: 'planning',
+          storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+        },
+        children: []
+      }]
+    });
+    setCurrentView('editor');
+  };
+
+  const duplicateRelease = (release) => {
+    const duplicate = {
+      ...release,
+      id: `release-${Date.now()}`,
+      name: `${release.name} (Copy)`,
+      version: incrementVersion(release.version),
+      status: 'active',
+      statusHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setSavedReleases(prev => [...prev, duplicate]);
+  };
+
+  const incrementVersion = (version) => {
+    const parts = version.split('.');
+    if (parts.length >= 3) {
+      parts[2] = (parseInt(parts[2]) + 1).toString();
+      return parts.join('.');
+    }
+    return version;
+  };
+
+  const countTotalNodes = (nodes) => {
+    return nodes.reduce((count, node) => {
+      return count + 1 + (node.children ? countTotalNodes(node.children) : 0);
+    }, 0);
+  };
+
+  const calculateCompletion = (nodes) => {
+    let totalTasks = 0;
+    let completedTasks = 0;
+    
+    const countTasks = (nodeList) => {
+      nodeList.forEach(node => {
+        if (node.type === 'task') {
+          totalTasks++;
+          if (node.properties.status === 'released' || node.properties.status === 'ready-for-release') {
+            completedTasks++;
+          }
+        }
+        if (node.children) {
+          countTasks(node.children);
+        }
+      });
+    };
+    
+    countTasks(nodes);
+    return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  };
+
+  const generatePreview = (nodes) => {
+    const centralNode = nodes.find(n => n.type === 'release');
+    if (!centralNode) return { centralNode: 'Empty', branches: [] };
+    
+    return {
+      centralNode: centralNode.title,
+      branches: centralNode.children ? centralNode.children.map(c => c.title).slice(0, 4) : []
+    };
+  };
