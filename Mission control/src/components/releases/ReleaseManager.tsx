@@ -398,3 +398,91 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     if (!node.children || node.children.length === 0) return 0;
     return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
   };
+
+  // Release management functions
+  const saveCurrentRelease = () => {
+    const releaseToSave: Release = {
+      ...currentRelease,
+      ...saveFormData,
+      id: currentRelease.id || `release-${Date.now()}`,
+      updatedAt: new Date().toISOString(),
+      nodeCount: countTotalNodes(currentRelease.nodes),
+      completion: calculateCompletion(currentRelease.nodes),
+      preview: generatePreview(currentRelease.nodes),
+      status: currentRelease.status || 'active',
+      statusHistory: currentRelease.statusHistory || []
+    };
+
+    if (currentRelease.id) {
+      setSavedReleases(prev => 
+        prev.map(r => r.id === currentRelease.id ? releaseToSave : r)
+      );
+    } else {
+      releaseToSave.createdAt = new Date().toISOString();
+      setSavedReleases(prev => [...prev, releaseToSave]);
+    }
+
+    setCurrentRelease(releaseToSave);
+    setShowSaveDialog(false);
+    setSaveFormData({ name: '', version: '', description: '', category: 'minor', tags: [], targetDate: '', environment: 'development' });
+  };
+
+  const loadRelease = (release: Release) => {
+    if (release.status === 'closed') {
+      setSelectedReleaseId(release.id);
+      setShowReopenDialog(true);
+      return;
+    }
+    
+    setCurrentRelease({
+      ...release,
+      updatedAt: new Date().toISOString()
+    });
+    setCurrentView('editor');
+  };
+
+  const createNewRelease = () => {
+    setCurrentRelease({
+      id: null,
+      name: 'New Release',
+      version: '1.0.0',
+      description: '',
+      category: 'minor',
+      tags: [],
+      targetDate: '',
+      environment: 'development',
+      status: 'active',
+      statusHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      nodes: [{
+        id: Date.now().toString(),
+        title: 'Release v1.0.0',
+        type: 'release',
+        color: 'bg-purple-600',
+        icon: 'Rocket',
+        expanded: true,
+        properties: {
+          version: '1.0.0', assignee: '', targetDate: '', environment: 'development',
+          description: '', tags: [], priority: 'medium', status: 'planning',
+          storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+        },
+        children: []
+      }]
+    });
+    setCurrentView('editor');
+  };
+
+  const duplicateRelease = (release: Release) => {
+    const duplicate: Release = {
+      ...release,
+      id: `release-${Date.now()}`,
+      name: `${release.name} (Copy)`,
+      version: incrementVersion(release.version),
+      status: 'active',
+      statusHistory: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setSavedReleases(prev => [...prev, duplicate]);
+  };
