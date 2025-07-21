@@ -67,3 +67,63 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
     path: '/teams',
     description: 'Management and access',
   },
+  {
+    id: 'incidents',
+    label: 'Incidents',
+    icon: 'AlertTriangle',
+    path: '/incidents',
+    description: 'Tracking and resolution',
+  },
+];
+
+const INITIAL_VIEW_STATE: ViewState = {
+  currentPage: 'dashboard',
+  sidebarCollapsed: false,
+  activeFilters: {},
+  searchQuery: '',
+  selectedItems: [],
+  viewMode: 'grid',
+  sortBy: 'updated',
+  sortOrder: 'desc',
+};
+
+const App: React.FC = () => {
+  const [viewState, setViewState] = useState<ViewState>(INITIAL_VIEW_STATE);
+  const [isLoading, setIsLoading] = useState(true);
+  
+  const { config, isLoading: configLoading, error: configError } = useAppConfig();
+
+  // Initialize keyboard shortcuts
+  useKeyboardShortcuts({
+    onSearch: () => {
+      console.log('Global search triggered');
+    },
+    onNewWorkflow: () => {
+      setViewState(prev => ({ ...prev, currentPage: 'workflows' }));
+    },
+    onNewRelease: () => {
+      setViewState(prev => ({ ...prev, currentPage: 'releases' }));
+    },
+    onToggleSidebar: () => {
+      setViewState(prev => ({ 
+        ...prev, 
+        sidebarCollapsed: !prev.sidebarCollapsed 
+      }));
+    },
+  });
+
+  // Load application state from localStorage
+  useEffect(() => {
+    try {
+      const savedState = localStorage.getItem('mission-control-view-state');
+      if (savedState) {
+        const parsed = JSON.parse(savedState);
+        setViewState(prev => ({ ...prev, ...parsed }));
+      }
+    } catch (error) {
+      console.warn('Failed to parse saved view state:', error);
+    }
+    setIsLoading(false);
+  }, []);
+
+  // Save view state to localStorage
