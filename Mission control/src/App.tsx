@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { WorkflowManager } from './components/workflows/WorkflowManager';
-import ReleaseManager from './components/releases/ReleaseManager';
+import { ReleaseManager } from './components/releases/ReleaseManager';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
