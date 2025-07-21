@@ -273,3 +273,80 @@ const ReleaseManager: React.FC = () => {
     
     return positionedNodes;
   }, []);
+
+  // Viewport Management Functions
+  const handleZoom = useCallback((delta: number, clientX?: number, clientY?: number) => {
+    setViewport(prev => {
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev.zoom + delta));
+      
+      if (clientX !== undefined && clientY !== undefined && canvasRef.current) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const offsetX = clientX - rect.left;
+        const offsetY = clientY - rect.top;
+        
+        // Zoom towards mouse position
+        const newPanX = offsetX - (offsetX - prev.panX) * (newZoom / prev.zoom);
+        const newPanY = offsetY - (offsetY - prev.panY) * (newZoom / prev.zoom);
+        
+        return { ...prev, zoom: newZoom, panX: newPanX, panY: newPanY };
+      }
+      
+      return { ...prev, zoom: newZoom };
+    });
+  }, []);
+
+  const handlePan = useCallback((deltaX: number, deltaY: number) => {
+    setViewport(prev => ({
+      ...prev,
+      panX: prev.panX + deltaX,
+      panY: prev.panY + deltaY
+    }));
+  }, []);
+
+  const resetViewport = useCallback(() => {
+    setViewport({
+      zoom: 1,
+      panX: 0,
+      panY: 0,
+      isDragging: false,
+      lastMousePos: { x: 0, y: 0 }
+    });
+  }, []);
+
+  // Canvas Event Handlers
+  const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 0) { // Left mouse button
+      setViewport(prev => ({
+        ...prev,
+        isDragging: true,
+        lastMousePos: { x: e.clientX, y: e.clientY }
+      }));
+    }
+  }, []);
+
+  const handleCanvasMouseMove = useCallback((e: React.MouseEvent) => {
+    setViewport(prev => {
+      if (prev.isDragging) {
+        const deltaX = e.clientX - prev.lastMousePos.x;
+        const deltaY = e.clientY - prev.lastMousePos.y;
+        
+        return {
+          ...prev,
+          panX: prev.panX + deltaX,
+          panY: prev.panY + deltaY,
+          lastMousePos: { x: e.clientX, y: e.clientY }
+        };
+      }
+      return prev;
+    });
+  }, []);
+
+  const handleCanvasMouseUp = useCallback(() => {
+    setViewport(prev => ({ ...prev, isDragging: false }));
+  }, []);
+
+  const handleCanvasWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    handleZoom(delta, e.clientX, e.clientY);
+  }, [handleZoom]);
