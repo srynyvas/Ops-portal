@@ -666,3 +666,62 @@ const ReleaseManagementTool = () => {
       });
     }
   };
+
+  // Render functions for catalogue
+  const renderCatalogueHeader = () => (
+    <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            <Rocket size={28} className="text-purple-600" />
+            Release Management
+          </h1>
+          <p className="text-gray-600 mt-1">Manage software releases, features, and tasks</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setCatalogueView(catalogueView === 'grid' ? 'list' : 'grid')}
+            className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
+            title={`Switch to ${catalogueView === 'grid' ? 'list' : 'grid'} view`}
+          >
+            {catalogueView === 'grid' ? <List size={20} /> : <Grid size={20} />}
+          </button>
+          
+          <button
+            onClick={createNewRelease}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
+          >
+            <Plus size={20} />
+            New Release
+          </button>
+        </div>
+      </div>
+
+      {/* Search and Filter */}
+      <div className="flex items-center gap-4 mt-4">
+        <div className="relative flex-1 max-w-md">
+          <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search releases..."
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
+
+        <select
+          value={selectedCategory}
+          onChange={(e) => setSelectedCategory(e.target.value)}
+          className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          {categories.map(category => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
