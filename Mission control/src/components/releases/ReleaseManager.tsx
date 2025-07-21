@@ -486,3 +486,138 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     };
     setSavedReleases(prev => [...prev, duplicate]);
   };
+
+  // Editor functions - Drag and Drop
+  const handleDragStart = (e: React.DragEvent, node: ReleaseNode) => {
+    setDraggedNode(node);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, node: ReleaseNode) => {
+    e.preventDefault();
+    if (draggedNode && draggedNode.id !== node.id && node.type !== 'task') {
+      setDropTarget(node.id);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetNode: ReleaseNode) => {
+    e.preventDefault();
+    if (!draggedNode || draggedNode.id === targetNode.id || targetNode.type === 'task') return;
+
+    let newNodes = removeNodeById(currentRelease.nodes, draggedNode.id);
+    newNodes = addNodeToParent(newNodes, targetNode.id, draggedNode);
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: newNodes,
+      updatedAt: new Date().toISOString()
+    }));
+    
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  // Editor functions - Node manipulation
+  const toggleExpanded = (nodeId: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (!node) return;
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: updateNodeById(prev.nodes, nodeId, { 
+        expanded: !node.expanded 
+      }),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const startEditing = (node: ReleaseNode) => {
+    setEditingNode(node.id);
+    setEditValue(node.title);
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim()) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: updateNodeById(prev.nodes, editingNode!, { title: editValue.trim() }),
+        updatedAt: new Date().toISOString()
+      }));
+    }
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const cancelEdit = () => {
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const addNewNode = (parentId: string) => {
+    const parent = findNodeById(currentRelease.nodes, parentId);
+    if (!parent) return;
+    
+    let newNodeType: 'feature' | 'task';
+    let newColor: string;
+    let newIcon: string;
+    
+    if (parent.type === 'release') {
+      newNodeType = 'feature';
+      newColor = 'bg-blue-600';
+      newIcon = 'Package';
+    } else if (parent.type === 'feature') {
+      newNodeType = 'task';
+      newColor = 'bg-gray-500';
+      newIcon = 'Code';
+    } else {
+      return; // Can't add children to tasks
+    }
+    
+    const newNode: ReleaseNode = {
+      id: Date.now().toString(),
+      title: newNodeType === 'feature' ? 'New Feature' : 'New Task',
+      type: newNodeType,
+      color: newColor,
+      icon: newIcon,
+      properties: {
+        version: '', assignee: '', targetDate: '', environment: 'development',
+        description: '', tags: [], priority: 'medium', status: 'planning',
+        storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+      },
+      children: []
+    };
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: addNodeToParent(prev.nodes, parentId, newNode),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const confirmDelete = (nodeId: string) => {
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (!node) return;
+
+    const childCount = countTotalChildren(node);
+    setDeleteConfirm({ nodeId, node, childCount });
+  };
+
+  const executeDelete = () => {
+    if (deleteConfirm) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: removeNodeById(prev.nodes, deleteConfirm.nodeId),
+        updatedAt: new Date().toISOString()
+      }));
+      setDeleteConfirm(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirm(null);
+  };
