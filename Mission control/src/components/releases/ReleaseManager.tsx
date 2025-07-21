@@ -171,3 +171,105 @@ const ReleaseManager: React.FC = () => {
     isDragging: false,
     lastMousePos: { x: 0, y: 0 }
   });
+
+  const [currentRelease, setCurrentRelease] = useState<Release>({
+    id: '',
+    name: '',
+    description: '',
+    category: 'web',
+    tags: [],
+    status: 'active',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    nodes: []
+  });
+  
+  // Dialog states
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showReopenDialog, setShowReopenDialog] = useState(false);
+  const [selectedReleaseId, setSelectedReleaseId] = useState<string | null>(null);
+  const [closeReason, setCloseReason] = useState('');
+  const [reopenReason, setReopenReason] = useState('');
+  
+  // Form states
+  const [saveFormData, setSaveFormData] = useState({
+    name: '',
+    version: '',
+    description: '',
+    category: 'web',
+    tags: [] as string[],
+    targetDate: '',
+    environment: 'development'
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  
+  // Editor states
+  const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const [draggedNode, setDraggedNode] = useState<ReleaseNode | null>(null);
+  const [dragTarget, setDragTarget] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ node: ReleaseNode; childCount: number } | null>(null);
+  
+  // Refs
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const dragCounter = useRef(0);
+
+  // Improved Node Positioning Algorithm
+  const calculateNodePositions = useCallback((nodes: ReleaseNode[]): ReleaseNode[] => {
+    const positionedNodes: ReleaseNode[] = [];
+    
+    const calculateSubtreeHeight = (node: ReleaseNode): number => {
+      if (!node.expanded || node.children.length === 0) {
+        return NODE_HEIGHT;
+      }
+      
+      let totalHeight = 0;
+      node.children.forEach(child => {
+        totalHeight += calculateSubtreeHeight(child) + VERTICAL_SPACING;
+      });
+      
+      return Math.max(NODE_HEIGHT, totalHeight - VERTICAL_SPACING);
+    };
+    
+    const positionNode = (node: ReleaseNode, x: number, y: number, depth: number): ReleaseNode => {
+      const positionedNode = { ...node, position: { x, y } };
+      
+      if (node.expanded && node.children.length > 0) {
+        const childrenStartY = y;
+        let currentY = childrenStartY;
+        
+        positionedNode.children = node.children.map(child => {
+          const childHeight = calculateSubtreeHeight(child);
+          const childX = x + NODE_WIDTH + HORIZONTAL_SPACING;
+          const childY = currentY;
+          
+          const positionedChild = positionNode(child, childX, childY, depth + 1);
+          currentY += childHeight + VERTICAL_SPACING;
+          
+          return positionedChild;
+        });
+        
+        // Center parent vertically among children
+        if (positionedNode.children.length > 0) {
+          const firstChildY = positionedNode.children[0].position!.y;
+          const lastChildY = positionedNode.children[positionedNode.children.length - 1].position!.y;
+          const childrenCenterY = (firstChildY + lastChildY) / 2;
+          positionedNode.position.y = childrenCenterY;
+        }
+      } else {
+        positionedNode.children = node.children;
+      }
+      
+      return positionedNode;
+    };
+    
+    let currentY = 100; // Start with some padding from top
+    
+    nodes.forEach(rootNode => {
+      const positioned = positionNode(rootNode, 100, currentY, 0); // Start with some padding from left
+      positionedNodes.push(positioned);
+      currentY += calculateSubtreeHeight(positioned) + VERTICAL_SPACING * 2; // Extra spacing between root nodes
+    });
+    
+    return positionedNodes;
+  }, []);
