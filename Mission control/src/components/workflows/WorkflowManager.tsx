@@ -3,7 +3,7 @@ import {
   Plus, 
   Search, 
   Filter, 
-  Grid3X3, 
+  Grid3x3, 
   List, 
   Star,
   Clock,
@@ -270,7 +270,7 @@ export const WorkflowManager: React.FC<WorkflowManagerProps> = ({
             onClick={() => onUpdateViewState({ viewMode: 'grid' })}
             className={`p-2 ${viewState.viewMode === 'grid' ? 'bg-gray-100' : ''}`}
           >
-            <Grid3X3 className="h-4 w-4" />
+            <Grid3x3 className="h-4 w-4" />
           </button>
           <button
             onClick={() => onUpdateViewState({ viewMode: 'list' })}
