@@ -350,3 +350,112 @@ const ReleaseManager: React.FC = () => {
     const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
     handleZoom(delta, e.clientX, e.clientY);
   }, [handleZoom]);
+
+  // Utility functions
+  const calculateProgress = (nodes: ReleaseNode[]): { completed: number; total: number; percentage: number } => {
+    let completed = 0;
+    let total = 0;
+    
+    const countNodes = (nodeList: ReleaseNode[]) => {
+      nodeList.forEach(node => {
+        if (node.type === 'task') {
+          total++;
+          if (node.properties.status === 'completed') {
+            completed++;
+          }
+        }
+        if (node.children.length > 0) {
+          countNodes(node.children);
+        }
+      });
+    };
+    
+    countNodes(nodes);
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    return { completed, total, percentage };
+  };
+
+  // Validation functions
+  const validateSaveForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!saveFormData.name.trim()) {
+      errors.name = 'Release name is required';
+    }
+    
+    if (!saveFormData.version.trim()) {
+      errors.version = 'Version is required';
+    } else if (!/^\d+\.\d+\.\d+(-[a-zA-Z0-9.-]+)?$/.test(saveFormData.version)) {
+      errors.version = 'Version must follow semantic versioning (e.g., 1.0.0)';
+    }
+    
+    if (saveFormData.targetDate && new Date(saveFormData.targetDate) < new Date()) {
+      errors.targetDate = 'Target date cannot be in the past';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Node management functions
+  const findNodeById = (nodes: ReleaseNode[], id: string): ReleaseNode | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const found = findNodeById(node.children, id);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const updateNode = (nodes: ReleaseNode[], id: string, updates: Partial<ReleaseNode>): ReleaseNode[] => {
+    return nodes.map(node => {
+      if (node.id === id) {
+        return { ...node, ...updates };
+      }
+      if (node.children.length > 0) {
+        return { ...node, children: updateNode(node.children, id, updates) };
+      }
+      return node;
+    });
+  };
+
+  const deleteNode = (nodes: ReleaseNode[], id: string): ReleaseNode[] => {
+    return nodes.filter(node => {
+      if (node.id === id) return false;
+      if (node.children.length > 0) {
+        node.children = deleteNode(node.children, id);
+      }
+      return true;
+    });
+  };
+
+  const addChildNode = (nodes: ReleaseNode[], parentId: string, newNode: ReleaseNode): ReleaseNode[] => {
+    return nodes.map(node => {
+      if (node.id === parentId) {
+        return { ...node, children: [...node.children, newNode] };
+      }
+      if (node.children.length > 0) {
+        return { ...node, children: addChildNode(node.children, parentId, newNode) };
+      }
+      return node;
+    });
+  };
+
+  const moveNode = (nodes: ReleaseNode[], nodeId: string, targetId: string): ReleaseNode[] => {
+    const nodeToMove = findNodeById(nodes, nodeId);
+    if (!nodeToMove) return nodes;
+    
+    let updatedNodes = deleteNode(nodes, nodeId);
+    updatedNodes = addChildNode(updatedNodes, targetId, nodeToMove);
+    
+    return updatedNodes;
+  };
+
+  const countChildNodes = (node: ReleaseNode): number => {
+    let count = node.children.length;
+    node.children.forEach(child => {
+      count += countChildNodes(child);
+    });
+    return count;
+  };
