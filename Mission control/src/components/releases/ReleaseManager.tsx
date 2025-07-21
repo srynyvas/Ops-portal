@@ -235,3 +235,91 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     'TrendingUp': TrendingUp, 'Layers': Layers, 'Terminal': Terminal, 'Users': Users,
     'Zap': Zap, 'Star': Star
   };
+
+  const categories = [
+    { id: 'all', name: 'All Releases', icon: FolderOpen },
+    { id: 'major', name: 'Major Release', icon: Rocket },
+    { id: 'minor', name: 'Minor Release', icon: Package },
+    { id: 'patch', name: 'Patch Release', icon: Code },
+    { id: 'hotfix', name: 'Hotfix', icon: Bug },
+    { id: 'beta', name: 'Beta Release', icon: GitBranch }
+  ];
+
+  const environments = [
+    { id: 'development', name: 'Development', color: 'bg-blue-100 text-blue-800' },
+    { id: 'staging', name: 'Staging', color: 'bg-yellow-100 text-yellow-800' },
+    { id: 'production', name: 'Production', color: 'bg-green-100 text-green-800' }
+  ];
+
+  const priorityColors = {
+    'low': 'bg-green-100 text-green-800',
+    'medium': 'bg-yellow-100 text-yellow-800', 
+    'high': 'bg-orange-100 text-orange-800',
+    'critical': 'bg-red-100 text-red-800'
+  };
+
+  const statusColors = {
+    'planning': 'bg-gray-100 text-gray-800',
+    'in-development': 'bg-blue-100 text-blue-800',
+    'testing': 'bg-purple-100 text-purple-800',
+    'ready-for-release': 'bg-green-100 text-green-800',
+    'released': 'bg-emerald-100 text-emerald-800',
+    'blocked': 'bg-red-100 text-red-800',
+    'on-hold': 'bg-gray-100 text-gray-800'
+  };
+
+  // Utility functions
+  const handleSearch = (query: string) => {
+    onUpdateViewState({ searchQuery: query });
+  };
+
+  const handleViewModeChange = (mode: 'grid' | 'list') => {
+    onUpdateViewState({ viewMode: mode });
+  };
+
+  const countTotalNodes = (nodes: ReleaseNode[]): number => {
+    return nodes.reduce((count, node) => {
+      return count + 1 + (node.children ? countTotalNodes(node.children) : 0);
+    }, 0);
+  };
+
+  const calculateCompletion = (nodes: ReleaseNode[]): number => {
+    let totalTasks = 0;
+    let completedTasks = 0;
+    
+    const countTasks = (nodeList: ReleaseNode[]) => {
+      nodeList.forEach(node => {
+        if (node.type === 'task') {
+          totalTasks++;
+          if (node.properties.status === 'released' || node.properties.status === 'ready-for-release') {
+            completedTasks++;
+          }
+        }
+        if (node.children) {
+          countTasks(node.children);
+        }
+      });
+    };
+    
+    countTasks(nodes);
+    return totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  };
+
+  const generatePreview = (nodes: ReleaseNode[]) => {
+    const centralNode = nodes.find(n => n.type === 'release');
+    if (!centralNode) return { centralNode: 'Empty', branches: [] };
+    
+    return {
+      centralNode: centralNode.title,
+      branches: centralNode.children ? centralNode.children.map(c => c.title).slice(0, 4) : []
+    };
+  };
+
+  const incrementVersion = (version: string): string => {
+    const parts = version.split('.');
+    if (parts.length >= 3) {
+      parts[2] = (parseInt(parts[2]) + 1).toString();
+      return parts.join('.');
+    }
+    return version;
+  };
