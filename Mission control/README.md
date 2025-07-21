@@ -1,5 +1,40 @@
 # Mission Control - Enterprise Operations Portal
 
+## 🚀 Quick Start
+
+### Option 1: Easy Setup (Recommended)
+```bash
+# For Linux/Mac
+chmod +x start-dev.sh
+./start-dev.sh
+
+# For Windows
+start-dev.bat
+```
+
+### Option 2: Manual Setup
+```bash
+npm install
+npm run dev
+```
+
+The application will open automatically at `http://localhost:3000`
+
+## ✅ Recent Fixes Applied
+
+### Issue Resolution (July 2025)
+**Problem**: Users were seeing a test screen instead of the full Mission Control application.
+
+**Root Cause**: The `index.tsx` file had a fallback mechanism using `require()` that was causing ES6 module import issues.
+
+**Solution Applied**:
+1. ✅ **Fixed index.tsx**: Replaced `require()` fallback with proper ES6 imports
+2. ✅ **Removed test component**: Cleaned up unused `simple-test.tsx` file  
+3. ✅ **Added startup scripts**: Created automated setup scripts for both Windows and Unix
+4. ✅ **Verified all imports**: Confirmed all component dependencies exist and are properly exported
+
+**What you should see now**: The full Mission Control dashboard with sidebar navigation, metrics, and all features working.
+
 ## Overview
 
 Mission Control is a comprehensive enterprise operations portal that provides a unified interface for managing software releases, monitoring system health, tracking workflows, and coordinating team activities.
@@ -53,8 +88,30 @@ src/
 - npm or yarn package manager
 - Modern web browser with ES2020 support
 
-### Installation
+### Installation & Development
 
+#### Automated Setup (Recommended)
+The easiest way to get started:
+
+**Linux/Mac:**
+```bash
+chmod +x start-dev.sh
+./start-dev.sh
+```
+
+**Windows:**
+```bash
+start-dev.bat
+```
+
+These scripts will:
+- ✅ Check system requirements (Node.js 18+)
+- ✅ Install dependencies automatically
+- ✅ Create `.env` file from example
+- ✅ Run TypeScript type checking
+- ✅ Start the development server
+
+#### Manual Setup
 ```bash
 # Install dependencies
 npm install
@@ -71,6 +128,32 @@ npm run type-check
 # Run linting
 npm run lint
 ```
+
+### Troubleshooting
+
+#### If you see a test screen instead of the full app:
+This issue has been **FIXED** in the latest version. If you still see it:
+
+1. **Pull the latest changes**:
+   ```bash
+   git pull origin feature/restructuring
+   ```
+
+2. **Clear cache and reinstall**:
+   ```bash
+   rm -rf node_modules package-lock.json
+   npm install
+   ```
+
+3. **Force refresh browser**: Ctrl+Shift+R (Windows) or Cmd+Shift+R (Mac)
+
+4. **Check browser console** for any error messages
+
+#### Common Issues:
+- **Port 3000 in use**: The server will automatically try ports 3001, 3002, etc.
+- **TypeScript errors**: Run `npm run type-check` to see all errors
+- **Missing dependencies**: Run `npm install` to ensure all packages are installed
+- **Browser compatibility**: Ensure you're using a modern browser (Chrome 90+, Firefox 88+, Safari 14+)
 
 ### Development
 
