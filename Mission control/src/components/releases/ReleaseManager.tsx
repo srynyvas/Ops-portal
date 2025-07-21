@@ -1,350 +1,277 @@
-  // Customization Panel Render Function
-  const renderCustomizationPanel = () => {
-    if (!customizingNode) return null;
-    const node = findNodeById(currentRelease.nodes, customizingNode);
-    if (!node) return null;
+  // Render connections between nodes
+  const renderConnections = (node, level = 0, parentX = 0, parentY = 0) => {
+    if (!node.expanded || !node.children || node.children.length === 0) return null;
+
+    return node.children.map((child, index) => {
+      const childX = 320;
+      const childY = (index - (node.children.length - 1) / 2) * 160;
+
+      return (
+        <g key={`connection-${child.id}`}>
+          <line
+            x1={parentX}
+            y1={parentY}
+            x2={parentX + childX}
+            y2={parentY + childY}
+            stroke="#e5e7eb"
+            strokeWidth="2"
+            className="transition-all duration-300"
+          />
+          {renderConnections(child, level + 1, parentX + childX, parentY + childY)}
+        </g>
+      );
+    });
+  };
+
+  // Render individual nodes with customization support
+  const renderNode = (node, level = 0, offsetX = 0, offsetY = 0) => {
+    const IconComponent = releaseIcons[node.icon] || Rocket;
+    const isDropTarget = dropTarget === node.id;
+    const isDragging = draggedNode?.id === node.id;
+    const isEditing = editingNode === node.id;
+    const hasProperties = node.properties.assignee || node.properties.targetDate || node.properties.description || node.properties.tags.length > 0;
+    const isReadOnly = currentRelease.status === 'closed';
+    
+    const getNodeSize = () => {
+      switch (node.type) {
+        case 'release': return 'w-64 h-40';
+        case 'feature': return 'w-52 h-32';
+        case 'task': return 'w-44 h-28';
+        default: return 'w-44 h-28';
+      }
+    };
+
+    const getTextSize = () => {
+      switch (node.type) {
+        case 'release': return 'text-lg font-bold';
+        case 'feature': return 'text-md font-semibold';
+        case 'task': return 'text-sm font-medium';
+        default: return 'text-sm';
+      }
+    };
 
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-bold text-gray-800">
-              Customize {node.type === 'release' ? 'Release' : node.type === 'feature' ? 'Feature' : 'Task'}: {node.title}
-            </h3>
-            <button
-              onClick={() => {
-                setCustomizingNode(null); 
-                setActiveTab('visual');
-                setNewTag('');
-                setNewDependency('');
-              }}
-              className="p-1 hover:bg-gray-100 rounded"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="flex border-b border-gray-200 mb-6">
-            <button
-              onClick={() => {setActiveTab('visual'); setNewTag(''); setNewDependency('');}}
-              className={`px-4 py-2 font-medium text-sm transition-colors ${
-                activeTab === 'visual' 
-                  ? 'text-purple-600 border-b-2 border-purple-600' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Palette size={16} className="inline mr-2" />
-              Visual
-            </button>
-            <button
-              onClick={() => {setActiveTab('properties'); setNewTag(''); setNewDependency('');}}
-              className={`px-4 py-2 font-medium text-sm transition-colors ${
-                activeTab === 'properties' 
-                  ? 'text-purple-600 border-b-2 border-purple-600' 
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Info size={16} className="inline mr-2" />
-              Properties
-            </button>
-          </div>
-
-          {/* Visual Tab */}
-          {activeTab === 'visual' && (
-            <div>
-              {/* Color Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Color</label>
-                <div className="grid grid-cols-8 gap-2">
-                  {colorOptions.map(color => (
-                    <button
-                      key={color}
-                      className={`w-8 h-8 rounded-full ${color} hover:scale-110 transition-transform ${
-                        node.color === color ? 'ring-2 ring-gray-400 ring-offset-2' : ''
-                      }`}
-                      onClick={() => updateNodeStyle(node.id, { color })}
-                    />
-                  ))}
-                </div>
+      <div key={node.id} className="relative">
+        <div
+          className={`
+            absolute transform -translate-x-1/2 -translate-y-1/2 ${getNodeSize()}
+            ${node.color} text-white rounded-xl shadow-lg cursor-pointer
+            transition-all duration-300 hover:scale-105 hover:shadow-xl
+            ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}
+            ${isDropTarget ? 'ring-4 ring-yellow-400 ring-opacity-75' : ''}
+            ${isReadOnly ? 'cursor-default' : ''}
+          `}
+          style={{ left: offsetX, top: offsetY }}
+          draggable={!isEditing && !isReadOnly}
+          onDragStart={(e) => !isReadOnly && handleDragStart(e, node)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => !isReadOnly && handleDragOver(e, node)}
+          onDrop={(e) => !isReadOnly && handleDrop(e, node)}
+        >
+          <div className="p-4 h-full flex flex-col justify-between">
+            {/* Header with icon and controls */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <IconComponent size={node.type === 'release' ? 26 : 22} className="text-white/90" />
+                {hasProperties && (
+                  <div className="w-2 h-2 bg-yellow-300 rounded-full" title="Has additional properties" />
+                )}
+                {node.type === 'release' && node.properties.version && (
+                  <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
+                    v{node.properties.version}
+                  </span>
+                )}
               </div>
+              
+              {!isReadOnly && (
+                <div className="flex gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCustomizingNode(node.id);
+                    }}
+                    className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                    title="Customize"
+                  >
+                    <Settings size={12} />
+                  </button>
 
-              {/* Icon Selection */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Icon</label>
-                <div className="grid grid-cols-6 gap-2 max-h-32 overflow-y-auto">
-                  {Object.entries(releaseIcons).map(([name, IconComponent]) => (
+                  {node.children && node.children.length > 0 && (
                     <button
-                      key={name}
-                      className={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${
-                        node.icon === name ? 'bg-purple-100 ring-2 ring-purple-300' : ''
-                      }`}
-                      onClick={() => updateNodeStyle(node.id, { icon: name })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpanded(node.id);
+                      }}
+                      className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                      title="Expand/Collapse"
                     >
-                      <IconComponent size={20} className="text-gray-600" />
+                      {node.expanded ? <Minus size={12} /> : <Plus size={12} />}
                     </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Node Type */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                <div className="flex gap-2">
-                  {['release', 'feature', 'task'].map(type => (
+                  )}
+                  
+                  {node.type !== 'task' && (
                     <button
-                      key={type}
-                      className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        node.type === type 
-                          ? 'bg-purple-500 text-white' 
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                      onClick={() => updateNodeStyle(node.id, { type })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addNewNode(node.id);
+                      }}
+                      className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                      title={`Add ${node.type === 'release' ? 'Feature' : 'Task'}`}
                     >
-                      {type.charAt(0).toUpperCase() + type.slice(1)}
+                      <Plus size={12} />
                     </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
+                  )}
 
-          {/* Properties Tab */}
-          {activeTab === 'properties' && (
-            <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-              {/* Version (for releases) */}
-              {node.type === 'release' && (
-                <div>
-                  <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <Package size={16} className="mr-2" />
-                    Version
-                  </label>
-                  <input
-                    type="text"
-                    value={node.properties.version}
-                    onChange={(e) => updateNodeProperties(node.id, { version: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="e.g., 1.0.0"
-                  />
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmDelete(node.id);
+                    }}
+                    className="w-6 h-6 bg-red-500/30 rounded-full flex items-center justify-center hover:bg-red-500/50 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={12} />
+                  </button>
                 </div>
               )}
+            </div>
 
-              {/* Assignee */}
-              <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <User size={16} className="mr-2" />
-                  Assignee
-                </label>
-                <input
-                  type="text"
-                  value={node.properties.assignee}
-                  onChange={(e) => updateNodeProperties(node.id, { assignee: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="Enter assignee name or team"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <FileText size={16} className="mr-2" />
-                  Description
-                </label>
-                <textarea
-                  value={node.properties.description}
-                  onChange={(e) => updateNodeProperties(node.id, { description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  rows="3"
-                  placeholder="Enter description"
-                />
-              </div>
-
-              {/* Priority, Status, Story Points */}
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
-                  <select
-                    value={node.properties.priority}
-                    onChange={(e) => updateNodeProperties(node.id, { priority: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                  <select
-                    value={node.properties.status}
-                    onChange={(e) => updateNodeProperties(node.id, { status: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="planning">Planning</option>
-                    <option value="in-development">In Development</option>
-                    <option value="testing">Testing</option>
-                    <option value="ready-for-release">Ready for Release</option>
-                    <option value="released">Released</option>
-                    <option value="blocked">Blocked</option>
-                    <option value="on-hold">On Hold</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Story Points</label>
+            {/* Node Title - Editable */}
+            <div className="flex-1 flex flex-col justify-center">
+              {isEditing ? (
+                <div className="w-full">
                   <input
-                    type="number"
-                    value={node.properties.storyPoints}
-                    onChange={(e) => updateNodeProperties(node.id, { storyPoints: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="e.g., 5"
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full bg-white/20 text-white placeholder-white/70 border border-white/30 rounded px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-white/50"
+                    placeholder="Enter title"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') saveEdit();
+                      if (e.key === 'Escape') cancelEdit();
+                    }}
                   />
+                  <div className="flex justify-center gap-1 mt-1">
+                    <button
+                      onClick={saveEdit}
+                      className="w-5 h-5 bg-green-500/30 rounded flex items-center justify-center hover:bg-green-500/50"
+                    >
+                      <Check size={10} />
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="w-5 h-5 bg-red-500/30 rounded flex items-center justify-center hover:bg-red-500/50"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                <div 
+                  className={`group w-full ${!isReadOnly ? 'cursor-pointer' : ''}`}
+                  onClick={() => !isReadOnly && startEditing(node)}
+                >
+                  <h3 className={`${getTextSize()} text-center text-white/95 leading-tight group-hover:text-white transition-colors mb-1`}>
+                    {node.title}
+                  </h3>
+                  {!isReadOnly && (
+                    <Edit3 size={10} className="mx-auto text-white/0 group-hover:text-white/70 transition-colors" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Property Indicators */}
+            <div className="space-y-1">
+              {/* Priority & Status */}
+              <div className="flex gap-1 justify-center">
+                {node.properties.priority && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[node.properties.priority]}`}>
+                    {node.properties.priority}
+                  </span>
+                )}
+                {node.properties.status && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[node.properties.status]}`}>
+                    {node.properties.status}
+                  </span>
+                )}
               </div>
 
-              {/* Target Date and Environment */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <Calendar size={16} className="mr-2" />
-                    Target Date
-                  </label>
-                  <input
-                    type="date"
-                    value={node.properties.targetDate}
-                    onChange={(e) => updateNodeProperties(node.id, { targetDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  />
-                </div>
+              {/* Quick Info */}
+              <div className="flex items-center justify-center gap-2 text-xs text-white/70">
+                {node.properties.assignee && (
+                  <span className="flex items-center gap-1">
+                    <User size={10} />
+                    {node.properties.assignee.split(' ')[0]}
+                  </span>
+                )}
+                {node.properties.storyPoints && (
+                  <span className="flex items-center gap-1">
+                    <Target size={10} />
+                    {node.properties.storyPoints}
+                  </span>
+                )}
+                {node.properties.targetDate && (
+                  <span className="flex items-center gap-1">
+                    <Clock size={10} />
+                    {new Date(node.properties.targetDate).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Environment</label>
-                  <select
-                    value={node.properties.environment}
-                    onChange={(e) => updateNodeProperties(node.id, { environment: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    {environments.map(env => (
-                      <option key={env.id} value={env.id}>
-                        {env.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Environment & Dependencies */}
+              <div className="flex items-center justify-center gap-1 text-xs">
+                {node.properties.environment && node.properties.environment !== 'development' && (
+                  <span className={`px-1.5 py-0.5 rounded text-xs ${
+                    environments.find(e => e.id === node.properties.environment)?.color || 'bg-white/20 text-white'
+                  }`}>
+                    {environments.find(e => e.id === node.properties.environment)?.name.slice(0, 4) || node.properties.environment}
+                  </span>
+                )}
+                {node.properties.dependencies.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 rounded text-xs">
+                    {node.properties.dependencies.length} dep{node.properties.dependencies.length !== 1 ? 's' : ''}
+                  </span>
+                )}
               </div>
 
               {/* Tags */}
-              <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <Tag size={16} className="mr-2" />
-                  Tags
-                </label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {node.properties.tags.map((tag, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
-                    >
+              {node.properties.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {node.properties.tags.slice(0, 3).map((tag, index) => (
+                    <span key={index} className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
                       {tag}
-                      <button
-                        onClick={() => removeTag(node.id, tag)}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
-                      >
-                        <X size={12} />
-                      </button>
                     </span>
                   ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newTag.trim()) {
-                        addTag(node.id, newTag);
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Add tag and press Enter"
-                  />
-                </div>
-              </div>
-
-              {/* Dependencies */}
-              <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <GitBranch size={16} className="mr-2" />
-                  Dependencies
-                </label>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {node.properties.dependencies.map((dep, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full"
-                    >
-                      {dep}
-                      <button
-                        onClick={() => removeDependency(node.id, dep)}
-                        className="ml-1 text-orange-600 hover:text-orange-800"
-                      >
-                        <X size={12} />
-                      </button>
+                  {node.properties.tags.length > 3 && (
+                    <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      +{node.properties.tags.length - 3}
                     </span>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newDependency}
-                    onChange={(e) => setNewDependency(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newDependency.trim()) {
-                        addDependency(node.id, newDependency);
-                      }
-                    }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder="Add dependency and press Enter"
-                  />
-                </div>
-              </div>
-
-              {/* Release Notes */}
-              {node.type === 'release' && (
-                <div>
-                  <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                    <FileText size={16} className="mr-2" />
-                    Release Notes
-                  </label>
-                  <textarea
-                    value={node.properties.releaseNotes}
-                    onChange={(e) => updateNodeProperties(node.id, { releaseNotes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    rows="4"
-                    placeholder="What's new in this release?"
-                  />
+                  )}
                 </div>
               )}
 
-              {/* Notes */}
-              <div>
-                <label className="flex items-center text-sm font-medium text-gray-700 mb-2">
-                  <FileText size={16} className="mr-2" />
-                  Notes
-                </label>
-                <textarea
-                  value={node.properties.notes}
-                  onChange={(e) => updateNodeProperties(node.id, { notes: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  rows="3"
-                  placeholder="Additional notes and comments"
-                />
-              </div>
+              {/* Children count */}
+              {node.children && node.children.length > 0 && (
+                <div className="text-center">
+                  <span className="text-xs text-white/70">
+                    {node.children.length} {node.type === 'release' ? 'feature' : 'task'}{node.children.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
+
+        {/* Child Nodes */}
+        {node.expanded && node.children && node.children.map((child, index) => {
+          const childOffsetX = offsetX + 320;
+          const childOffsetY = offsetY + (index - (node.children.length - 1) / 2) * 160;
+          
+          return renderNode(child, level + 1, childOffsetX, childOffsetY);
+        })}
       </div>
     );
   };
