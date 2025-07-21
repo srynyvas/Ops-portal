@@ -323,3 +323,78 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     }
     return version;
   };
+
+  // Filter releases
+  const filteredReleases = savedReleases.filter(release => {
+    const searchQuery = viewState.searchQuery.toLowerCase();
+    const selectedCategory = viewState.activeFilters.category || 'all';
+    
+    const matchesSearch = !searchQuery || (
+      release.name.toLowerCase().includes(searchQuery) ||
+      release.version.toLowerCase().includes(searchQuery) ||
+      release.description.toLowerCase().includes(searchQuery) ||
+      release.tags.some(tag => tag.toLowerCase().includes(searchQuery))
+    );
+    
+    const matchesCategory = selectedCategory === 'all' || release.category === selectedCategory;
+    
+    return matchesSearch && matchesCategory;
+  });
+
+  // Node management functions
+  const findNodeById = (nodes: ReleaseNode[], id: string): ReleaseNode | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findNodeById(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const updateNodeById = (nodes: ReleaseNode[], id: string, updates: Partial<ReleaseNode>): ReleaseNode[] => {
+    return nodes.map(node => {
+      if (node.id === id) {
+        return { ...node, ...updates };
+      }
+      if (node.children) {
+        return { ...node, children: updateNodeById(node.children, id, updates) };
+      }
+      return node;
+    });
+  };
+
+  const removeNodeById = (nodes: ReleaseNode[], id: string): ReleaseNode[] => {
+    return nodes.filter(node => {
+      if (node.id === id) return false;
+      if (node.children) {
+        node.children = removeNodeById(node.children, id);
+      }
+      return true;
+    });
+  };
+
+  const addNodeToParent = (nodes: ReleaseNode[], parentId: string, newNode: ReleaseNode): ReleaseNode[] => {
+    return nodes.map(node => {
+      if (node.id === parentId) {
+        return {
+          ...node,
+          children: [...(node.children || []), newNode],
+          expanded: true
+        };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: addNodeToParent(node.children, parentId, newNode)
+        };
+      }
+      return node;
+    });
+  };
+
+  const countTotalChildren = (node: ReleaseNode): number => {
+    if (!node.children || node.children.length === 0) return 0;
+    return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
+  };
