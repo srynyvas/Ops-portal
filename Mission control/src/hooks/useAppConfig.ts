@@ -4,7 +4,7 @@ import type { AppConfig } from '../types';
 const DEFAULT_CONFIG: AppConfig = {
   version: '1.0.0',
   environment: 'development',
-  apiBaseUrl: process.env.REACT_APP_API_URL || 'http://localhost:3001',
+  apiBaseUrl: import.meta.env.VITE_API_URL || 'http://localhost:3001',
   features: {
     enableWorkflows: true,
     enableReleases: true,
