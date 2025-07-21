@@ -296,6 +296,198 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     return errors;
   };
 
+  // Node management functions
+  const findNodeById = (nodes, id) => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findNodeById(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const updateNodeById = (nodes, id, updates) => {
+    return nodes.map(node => {
+      if (node.id === id) {
+        return { ...node, ...updates };
+      }
+      if (node.children) {
+        return { ...node, children: updateNodeById(node.children, id, updates) };
+      }
+      return node;
+    });
+  };
+
+  const removeNodeById = (nodes, id) => {
+    return nodes.filter(node => {
+      if (node.id === id) return false;
+      if (node.children) {
+        node.children = removeNodeById(node.children, id);
+      }
+      return true;
+    });
+  };
+
+  const addNodeToParent = (nodes, parentId, newNode) => {
+    return nodes.map(node => {
+      if (node.id === parentId) {
+        return {
+          ...node,
+          children: [...(node.children || []), newNode],
+          expanded: true
+        };
+      }
+      if (node.children) {
+        return {
+          ...node,
+          children: addNodeToParent(node.children, parentId, newNode)
+        };
+      }
+      return node;
+    });
+  };
+
+  const countTotalChildren = (node) => {
+    if (!node.children || node.children.length === 0) return 0;
+    return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
+  };
+
+  // Editor functions
+  const handleDragStart = (e, node) => {
+    setDraggedNode(node);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', node.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  const handleDragOver = (e, node) => {
+    e.preventDefault();
+    if (draggedNode && draggedNode.id !== node.id && node.type !== 'task') {
+      setDropTarget(node.id);
+      e.dataTransfer.dropEffect = 'move';
+    }
+  };
+
+  const handleDrop = (e, targetNode) => {
+    e.preventDefault();
+    if (!draggedNode || draggedNode.id === targetNode.id || targetNode.type === 'task') return;
+
+    let newNodes = removeNodeById(currentRelease.nodes, draggedNode.id);
+    newNodes = addNodeToParent(newNodes, targetNode.id, draggedNode);
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: newNodes,
+      updatedAt: new Date().toISOString()
+    }));
+    
+    setDraggedNode(null);
+    setDropTarget(null);
+  };
+
+  const toggleExpanded = (nodeId) => {
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: updateNodeById(prev.nodes, nodeId, { 
+        expanded: !findNodeById(prev.nodes, nodeId).expanded 
+      }),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const startEditing = (node) => {
+    if (currentRelease.status === 'closed') return;
+    setEditingNode(node.id);
+    setEditValue(node.title);
+  };
+
+  const saveEdit = () => {
+    if (editValue.trim()) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: updateNodeById(prev.nodes, editingNode, { title: editValue.trim() }),
+        updatedAt: new Date().toISOString()
+      }));
+    }
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const cancelEdit = () => {
+    setEditingNode(null);
+    setEditValue('');
+  };
+
+  const addNewNode = (parentId) => {
+    if (currentRelease.status === 'closed') return;
+    
+    const parent = findNodeById(currentRelease.nodes, parentId);
+    let newNodeType, newColor, newIcon;
+    
+    if (parent?.type === 'release') {
+      newNodeType = 'feature';
+      newColor = 'bg-blue-600';
+      newIcon = 'Package';
+    } else if (parent?.type === 'feature') {
+      newNodeType = 'task';
+      newColor = 'bg-gray-500';
+      newIcon = 'Code';
+    } else {
+      return; // Can't add children to tasks
+    }
+    
+    const newNode = {
+      id: Date.now().toString(),
+      title: newNodeType === 'feature' ? 'New Feature' : 'New Task',
+      type: newNodeType,
+      color: newColor,
+      icon: newIcon,
+      properties: {
+        version: '', assignee: '', targetDate: '', environment: 'development',
+        description: '', tags: [], priority: 'medium', status: 'planning',
+        storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+      },
+      children: []
+    };
+    
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: addNodeToParent(prev.nodes, parentId, newNode),
+      updatedAt: new Date().toISOString()
+    }));
+  };
+
+  const confirmDelete = (nodeId) => {
+    if (currentRelease.status === 'closed') return;
+    
+    const node = findNodeById(currentRelease.nodes, nodeId);
+    if (!node) return;
+
+    const childCount = countTotalChildren(node);
+    setDeleteConfirm({ nodeId, node, childCount });
+  };
+
+  const executeDelete = () => {
+    if (deleteConfirm) {
+      setCurrentRelease(prev => ({
+        ...prev,
+        nodes: removeNodeById(prev.nodes, deleteConfirm.nodeId),
+        updatedAt: new Date().toISOString()
+      }));
+      setDeleteConfirm(null);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeleteConfirm(null);
+  };
+
   // Release management functions
   const saveCurrentRelease = () => {
     const errors = validateReleaseForm(saveFormData);
@@ -541,62 +733,271 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     return matchesSearch && matchesCategory;
   });
 
-  // Node management functions
-  const findNodeById = (nodes, id) => {
-    for (const node of nodes) {
-      if (node.id === id) return node;
-      if (node.children) {
-        const found = findNodeById(node.children, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
+  // Render connections between nodes
+  const renderConnections = (node, level = 0, parentX = 0, parentY = 0) => {
+    if (!node.expanded || !node.children || node.children.length === 0) return null;
 
-  const updateNodeById = (nodes, id, updates) => {
-    return nodes.map(node => {
-      if (node.id === id) {
-        return { ...node, ...updates };
-      }
-      if (node.children) {
-        return { ...node, children: updateNodeById(node.children, id, updates) };
-      }
-      return node;
+    return node.children.map((child, index) => {
+      const childX = 320;
+      const childY = (index - (node.children.length - 1) / 2) * 160;
+
+      return (
+        <g key={`connection-${child.id}`}>
+          <line
+            x1={parentX}
+            y1={parentY}
+            x2={parentX + childX}
+            y2={parentY + childY}
+            stroke="#e5e7eb"
+            strokeWidth="2"
+            className="transition-all duration-300"
+          />
+          {renderConnections(child, level + 1, parentX + childX, parentY + childY)}
+        </g>
+      );
     });
   };
 
-  const removeNodeById = (nodes, id) => {
-    return nodes.filter(node => {
-      if (node.id === id) return false;
-      if (node.children) {
-        node.children = removeNodeById(node.children, id);
+  // Render individual nodes
+  const renderNode = (node, level = 0, offsetX = 0, offsetY = 0) => {
+    const IconComponent = releaseIcons[node.icon] || Rocket;
+    const isDropTarget = dropTarget === node.id;
+    const isDragging = draggedNode?.id === node.id;
+    const isEditing = editingNode === node.id;
+    const hasProperties = node.properties.assignee || node.properties.targetDate || node.properties.description || node.properties.tags.length > 0;
+    const isReadOnly = currentRelease.status === 'closed';
+    
+    const getNodeSize = () => {
+      switch (node.type) {
+        case 'release': return 'w-64 h-40';
+        case 'feature': return 'w-52 h-32';
+        case 'task': return 'w-44 h-28';
+        default: return 'w-44 h-28';
       }
-      return true;
-    });
-  };
+    };
 
-  const addNodeToParent = (nodes, parentId, newNode) => {
-    return nodes.map(node => {
-      if (node.id === parentId) {
-        return {
-          ...node,
-          children: [...(node.children || []), newNode],
-          expanded: true
-        };
+    const getTextSize = () => {
+      switch (node.type) {
+        case 'release': return 'text-lg font-bold';
+        case 'feature': return 'text-md font-semibold';
+        case 'task': return 'text-sm font-medium';
+        default: return 'text-sm';
       }
-      if (node.children) {
-        return {
-          ...node,
-          children: addNodeToParent(node.children, parentId, newNode)
-        };
-      }
-      return node;
-    });
-  };
+    };
 
-  const countTotalChildren = (node) => {
-    if (!node.children || node.children.length === 0) return 0;
-    return node.children.reduce((count, child) => count + 1 + countTotalChildren(child), 0);
+    return (
+      <div key={node.id} className="relative">
+        <div
+          className={`
+            absolute transform -translate-x-1/2 -translate-y-1/2 ${getNodeSize()}
+            ${node.color} text-white rounded-xl shadow-lg cursor-pointer
+            transition-all duration-300 hover:scale-105 hover:shadow-xl
+            ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}
+            ${isDropTarget ? 'ring-4 ring-yellow-400 ring-opacity-75' : ''}
+            ${isReadOnly ? 'cursor-default' : ''}
+          `}
+          style={{ left: offsetX, top: offsetY }}
+          draggable={!isEditing && !isReadOnly}
+          onDragStart={(e) => !isReadOnly && handleDragStart(e, node)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => !isReadOnly && handleDragOver(e, node)}
+          onDrop={(e) => !isReadOnly && handleDrop(e, node)}
+        >
+          <div className="p-4 h-full flex flex-col justify-between">
+            {/* Header with icon and controls */}
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-2">
+                <IconComponent size={node.type === 'release' ? 26 : 22} className="text-white/90" />
+                {hasProperties && (
+                  <div className="w-2 h-2 bg-yellow-300 rounded-full" title="Has additional properties" />
+                )}
+                {node.type === 'release' && node.properties.version && (
+                  <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
+                    v{node.properties.version}
+                  </span>
+                )}
+              </div>
+              
+              {!isReadOnly && (
+                <div className="flex gap-1">
+                  {node.children && node.children.length > 0 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleExpanded(node.id);
+                      }}
+                      className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                      title="Expand/Collapse"
+                    >
+                      {node.expanded ? <Minus size={12} /> : <Plus size={12} />}
+                    </button>
+                  )}
+                  
+                  {node.type !== 'task' && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        addNewNode(node.id);
+                      }}
+                      className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30 transition-colors"
+                      title={`Add ${node.type === 'release' ? 'Feature' : 'Task'}`}
+                    >
+                      <Plus size={12} />
+                    </button>
+                  )}
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      confirmDelete(node.id);
+                    }}
+                    className="w-6 h-6 bg-red-500/30 rounded-full flex items-center justify-center hover:bg-red-500/50 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Node Title - Editable */}
+            <div className="flex-1 flex flex-col justify-center">
+              {isEditing ? (
+                <div className="w-full">
+                  <input
+                    type="text"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full bg-white/20 text-white placeholder-white/70 border border-white/30 rounded px-2 py-1 text-center text-sm focus:outline-none focus:ring-2 focus:ring-white/50"
+                    placeholder="Enter title"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === 'Enter') saveEdit();
+                      if (e.key === 'Escape') cancelEdit();
+                    }}
+                  />
+                  <div className="flex justify-center gap-1 mt-1">
+                    <button
+                      onClick={saveEdit}
+                      className="w-5 h-5 bg-green-500/30 rounded flex items-center justify-center hover:bg-green-500/50"
+                    >
+                      <Check size={10} />
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="w-5 h-5 bg-red-500/30 rounded flex items-center justify-center hover:bg-red-500/50"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div 
+                  className={`group w-full ${!isReadOnly ? 'cursor-pointer' : ''}`}
+                  onClick={() => !isReadOnly && startEditing(node)}
+                >
+                  <h3 className={`${getTextSize()} text-center text-white/95 leading-tight group-hover:text-white transition-colors mb-1`}>
+                    {node.title}
+                  </h3>
+                  {!isReadOnly && (
+                    <Edit3 size={10} className="mx-auto text-white/0 group-hover:text-white/70 transition-colors" />
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Property Indicators */}
+            <div className="space-y-1">
+              {/* Priority & Status */}
+              <div className="flex gap-1 justify-center">
+                {node.properties.priority && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${priorityColors[node.properties.priority]}`}>
+                    {node.properties.priority}
+                  </span>
+                )}
+                {node.properties.status && (
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[node.properties.status]}`}>
+                    {node.properties.status}
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Info */}
+              <div className="flex items-center justify-center gap-2 text-xs text-white/70">
+                {node.properties.assignee && (
+                  <span className="flex items-center gap-1">
+                    <User size={10} />
+                    {node.properties.assignee.split(' ')[0]}
+                  </span>
+                )}
+                {node.properties.storyPoints && (
+                  <span className="flex items-center gap-1">
+                    <Target size={10} />
+                    {node.properties.storyPoints}
+                  </span>
+                )}
+                {node.properties.targetDate && (
+                  <span className="flex items-center gap-1">
+                    <Clock size={10} />
+                    {new Date(node.properties.targetDate).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+
+              {/* Environment & Dependencies */}
+              <div className="flex items-center justify-center gap-1 text-xs">
+                {node.properties.environment && node.properties.environment !== 'development' && (
+                  <span className={`px-1.5 py-0.5 rounded text-xs ${
+                    environments.find(e => e.id === node.properties.environment)?.color || 'bg-white/20 text-white'
+                  }`}>
+                    {environments.find(e => e.id === node.properties.environment)?.name.slice(0, 4) || node.properties.environment}
+                  </span>
+                )}
+                {node.properties.dependencies.length > 0 && (
+                  <span className="px-1.5 py-0.5 bg-orange-200 text-orange-800 rounded text-xs">
+                    {node.properties.dependencies.length} dep{node.properties.dependencies.length !== 1 ? 's' : ''}
+                  </span>
+                )}
+              </div>
+
+              {/* Tags */}
+              {node.properties.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 justify-center">
+                  {node.properties.tags.slice(0, 3).map((tag, index) => (
+                    <span key={index} className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      {tag}
+                    </span>
+                  ))}
+                  {node.properties.tags.length > 3 && (
+                    <span className="px-1.5 py-0.5 bg-white/20 rounded text-xs">
+                      +{node.properties.tags.length - 3}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* Children count */}
+              {node.children && node.children.length > 0 && (
+                <div className="text-center">
+                  <span className="text-xs text-white/70">
+                    {node.children.length} {node.type === 'release' ? 'feature' : 'task'}{node.children.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Child Nodes */}
+        {node.expanded && node.children && node.children.map((child, index) => {
+          const childOffsetX = offsetX + 320;
+          const childOffsetY = offsetY + (index - (node.children.length - 1) / 2) * 160;
+          
+          return renderNode(child, level + 1, childOffsetX, childOffsetY);
+        })}
+      </div>
+    );
   };
 
   // Return the two main views - this is what you'll see
@@ -1189,9 +1590,10 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     );
   }
 
-  // Editor view - This shows a simple placeholder for now
+  // Editor view - Now with full visual interface
   return (
     <div className="w-full h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+      {/* Editor Header */}
       <div className="absolute top-4 left-4 z-10">
         <div className="flex items-center gap-4 mb-2">
           <button
@@ -1202,24 +1604,26 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
             <span className="text-sm font-medium">Back to Catalogue</span>
           </button>
           
-          <button
-            onClick={() => {
-              setSaveFormData({
-                name: currentRelease.name,
-                version: currentRelease.version || '1.0.0',
-                description: currentRelease.description,
-                category: currentRelease.category,
-                tags: currentRelease.tags,
-                targetDate: currentRelease.targetDate || '',
-                environment: currentRelease.environment || 'development'
-              });
-              setShowSaveDialog(true);
-            }}
-            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-          >
-            <Save size={16} />
-            <span className="text-sm font-medium">Save Release</span>
-          </button>
+          {currentRelease.status !== 'closed' && (
+            <button
+              onClick={() => {
+                setSaveFormData({
+                  name: currentRelease.name,
+                  version: currentRelease.version || '1.0.0',
+                  description: currentRelease.description,
+                  category: currentRelease.category,
+                  tags: currentRelease.tags,
+                  targetDate: currentRelease.targetDate || '',
+                  environment: currentRelease.environment || 'development'
+                });
+                setShowSaveDialog(true);
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+            >
+              <Save size={16} />
+              <span className="text-sm font-medium">Save Release</span>
+            </button>
+          )}
         </div>
         
         <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
@@ -1229,40 +1633,128 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
               v{currentRelease.version}
             </span>
           )}
+          {currentRelease.status === 'closed' && (
+            <span className="px-3 py-1 bg-red-100 text-red-700 text-sm rounded-full font-medium">
+              🔒 Read Only
+            </span>
+          )}
         </h1>
         {currentRelease.description && (
           <p className="text-sm text-gray-600 bg-white/80 backdrop-blur-sm rounded-lg p-3 max-w-md mt-2">
             {currentRelease.description}
           </p>
         )}
+        
+        {currentRelease.status === 'closed' && (
+          <p className="text-sm text-red-600 bg-red-50 backdrop-blur-sm rounded-lg p-3 max-w-md mt-2">
+            <strong>⚠️ This release is closed:</strong> All editing functions are disabled. Return to the catalogue to reopen if needed.
+          </p>
+        )}
       </div>
 
-      {/* Simple Editor Placeholder */}
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="w-24 h-24 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Rocket size={32} className="text-purple-600" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-700 mb-2">Release Editor</h2>
-          <p className="text-gray-600 mb-4">
-            Visual release planning interface is loading...
-          </p>
-          <div className="bg-white rounded-lg p-6 shadow-lg max-w-md mx-auto">
-            <h3 className="font-semibold text-gray-800 mb-2">Current Release:</h3>
-            <p className="text-gray-600">
-              <strong>{currentRelease.name}</strong> v{currentRelease.version}
-            </p>
-            <p className="text-sm text-gray-500 mt-2">
-              {currentRelease.description || 'No description provided'}
-            </p>
-            <div className="mt-4 text-xs text-gray-500">
-              Status: {currentRelease.status || 'Active'} • 
-              Environment: {currentRelease.environment || 'Development'} • 
-              Nodes: {currentRelease.nodes?.length || 0}
-            </div>
+      {/* Release Canvas */}
+      <div className="relative w-full h-full overflow-auto">
+        <div className="absolute inset-0" style={{ minWidth: '3000px', minHeight: '2000px' }}>
+          {/* Connection Lines */}
+          <svg className="absolute inset-0 w-full h-full pointer-events-none">
+            {currentRelease.nodes.map(node => renderConnections(node, 0, 300, 600))}
+          </svg>
+
+          {/* Nodes */}
+          <div className="relative w-full h-full">
+            {currentRelease.nodes.map(node => renderNode(node, 0, 300, 600))}
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertTriangle size={20} className="text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-800">Confirm Deletion</h3>
+                <p className="text-sm text-gray-600">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Are you sure you want to delete "<strong>{deleteConfirm.node.title}</strong>"?
+              </p>
+              {deleteConfirm.childCount > 0 && (
+                <p className="text-red-600 text-sm bg-red-50 p-2 rounded">
+                  ⚠️ This will also delete {deleteConfirm.childCount} child {deleteConfirm.childCount === 1 ? 'item' : 'items'}.
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={executeDelete}
+                className="flex-1 bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-colors font-medium"
+              >
+                Delete
+              </button>
+              <button
+                onClick={cancelDelete}
+                className="flex-1 bg-gray-200 text-gray-800 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors font-medium"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Drag Indicator */}
+      {draggedNode && (
+        <div className="fixed bottom-4 right-4 bg-purple-600 text-white px-4 py-2 rounded-lg shadow-lg z-20">
+          <p className="text-sm font-medium">
+            Dragging: <span className="font-bold">{draggedNode.title}</span>
+          </p>
+          <p className="text-xs opacity-75">Drop on a release or feature</p>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {currentRelease.nodes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Rocket size={32} className="text-gray-400" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-600 mb-2">No items left!</h2>
+            <p className="text-gray-500 mb-4">Add a release to get started</p>
+            <button
+              onClick={() => setCurrentRelease(prev => ({
+                ...prev,
+                nodes: [{
+                  id: Date.now().toString(),
+                  title: 'Release v1.0.0',
+                  type: 'release',
+                  color: 'bg-purple-600',
+                  icon: 'Rocket',
+                  expanded: true,
+                  properties: {
+                    version: '1.0.0', assignee: '', targetDate: '', environment: 'development',
+                    description: '', tags: [], priority: 'medium', status: 'planning',
+                    storyPoints: '', dependencies: [], notes: '', releaseNotes: ''
+                  },
+                  children: []
+                }],
+                updatedAt: new Date().toISOString()
+              }))}
+              className="bg-purple-500 text-white px-6 py-3 rounded-lg hover:bg-purple-600 transition-colors font-medium"
+            >
+              Create New Release
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
