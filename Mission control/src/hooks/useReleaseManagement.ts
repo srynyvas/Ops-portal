@@ -550,9 +550,9 @@ export const useApprovalWorkflow = (): UseApprovalWorkflowReturn => {
 
 async function mockFetchReleases(filter: ReleaseFilter, sort: ReleaseSortOptions, pagination: PaginationOptions): Promise<PagedResponse<Release>> {
   // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 100));
   
-  // Return mock data
+  // Return empty data - no mock releases
   return {
     items: [],
     pagination: {

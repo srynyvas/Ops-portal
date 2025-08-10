@@ -128,75 +128,28 @@ const ReleaseAnalyticsDashboard: React.FC = () => {
     { label: 'Custom Range', value: 'custom', days: 0 }
   ];
 
-  // Mock data for demonstration
-  const mockAnalytics: ReleaseAnalytics = {
-    releaseId: 'current-release',
+  // Empty analytics data - will be populated from actual releases
+  const emptyAnalytics: ReleaseAnalytics = {
+    releaseId: '',
     metrics: {
-      velocity: 85,
-      leadTime: 14,
-      cycleTime: 7,
-      deploymentFrequency: 4,
-      mttr: 2.5,
-      changeFailureRate: 8,
-      bugEscapeRate: 3
+      velocity: 0,
+      leadTime: 0,
+      cycleTime: 0,
+      deploymentFrequency: 0,
+      mttr: 0,
+      changeFailureRate: 0,
+      bugEscapeRate: 0
     },
     trends: {
-      velocityTrend: [
-        { date: new Date('2024-01-01'), value: 75, label: 'Jan' },
-        { date: new Date('2024-02-01'), value: 78, label: 'Feb' },
-        { date: new Date('2024-03-01'), value: 82, label: 'Mar' },
-        { date: new Date('2024-04-01'), value: 85, label: 'Apr' },
-        { date: new Date('2024-05-01'), value: 88, label: 'May' },
-        { date: new Date('2024-06-01'), value: 85, label: 'Jun' }
-      ],
-      deploymentTrend: [
-        { date: new Date('2024-01-01'), value: 3, label: 'Jan' },
-        { date: new Date('2024-02-01'), value: 4, label: 'Feb' },
-        { date: new Date('2024-03-01'), value: 5, label: 'Mar' },
-        { date: new Date('2024-04-01'), value: 4, label: 'Apr' },
-        { date: new Date('2024-05-01'), value: 6, label: 'May' },
-        { date: new Date('2024-06-01'), value: 4, label: 'Jun' }
-      ],
-      qualityTrend: [
-        { date: new Date('2024-01-01'), value: 92, label: 'Jan' },
-        { date: new Date('2024-02-01'), value: 89, label: 'Feb' },
-        { date: new Date('2024-03-01'), value: 94, label: 'Mar' },
-        { date: new Date('2024-04-01'), value: 92, label: 'Apr' },
-        { date: new Date('2024-05-01'), value: 96, label: 'May' },
-        { date: new Date('2024-06-01'), value: 92, label: 'Jun' }
-      ]
+      velocityTrend: [],
+      deploymentTrend: [],
+      qualityTrend: []
     },
-    comparisons: {
-      previousRelease: {
-        metric: 'velocity',
-        current: 85,
-        comparison: 78,
-        difference: 7,
-        percentageChange: 8.97
-      },
-      teamAverage: {
-        metric: 'velocity',
-        current: 85,
-        comparison: 82,
-        difference: 3,
-        percentageChange: 3.66
-      },
-      targetMetrics: {
-        metric: 'velocity',
-        current: 85,
-        comparison: 90,
-        difference: -5,
-        percentageChange: -5.56
-      }
-    }
+    comparisons: {}
   };
 
-  const mockTeamMetrics: TeamMetric[] = [
-    { teamName: 'Team Alpha', velocity: 88, quality: 94, efficiency: 91 },
-    { teamName: 'Team Beta', velocity: 82, quality: 89, efficiency: 85 },
-    { teamName: 'Team Gamma', velocity: 90, quality: 96, efficiency: 93 },
-    { teamName: 'Team Delta', velocity: 76, quality: 87, efficiency: 81 }
-  ];
+  // Empty team metrics - will be populated from actual team data
+  const emptyTeamMetrics: TeamMetric[] = [];
 
   // Auto-refresh effect
   useEffect(() => {
@@ -237,7 +190,7 @@ const ReleaseAnalyticsDashboard: React.FC = () => {
 
   // Calculate metric comparisons
   const metricComparisons = useMemo<Record<string, MetricComparison>>(() => {
-    const currentMetrics = analytics?.metrics || mockAnalytics.metrics;
+    const currentMetrics = analytics?.metrics || emptyAnalytics.metrics;
     
     return {
       velocity: {
@@ -283,7 +236,7 @@ const ReleaseAnalyticsDashboard: React.FC = () => {
         change: ((5 - currentMetrics.bugEscapeRate) / 5) * 100
       }
     };
-  }, [analytics, mockAnalytics.metrics]);
+  }, [analytics, emptyAnalytics.metrics]);
 
   if (loading) {
     return (
@@ -304,7 +257,7 @@ const ReleaseAnalyticsDashboard: React.FC = () => {
     );
   }
 
-  const currentAnalytics = analytics || mockAnalytics;
+  const currentAnalytics = analytics || emptyAnalytics;
 
   return (
     <div className="space-y-6">
@@ -537,7 +490,7 @@ const ReleaseAnalyticsDashboard: React.FC = () => {
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Team Performance Comparison</h3>
           <BarChart
-            data={mockTeamMetrics}
+            data={emptyTeamMetrics}
             height={200}
           />
         </div>

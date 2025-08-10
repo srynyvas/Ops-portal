@@ -115,51 +115,8 @@ const IntegratedReleaseManager: React.FC = () => {
     ]
   });
 
-  // Saved releases catalogue
-  const [savedReleases, setSavedReleases] = useState<SavedRelease[]>([
-    {
-      id: 'release-1',
-      name: 'Mobile App v2.1.0',
-      version: '2.1.0',
-      description: 'Major mobile app update with new UI components and performance improvements.',
-      category: 'minor',
-      tags: ['mobile', 'ui', 'performance'],
-      targetDate: '2025-08-30',
-      environment: 'staging',
-      createdAt: '2025-07-15T10:00:00.000Z',
-      updatedAt: '2025-07-18T14:30:00.000Z',
-      status: 'active',
-      statusHistory: [],
-      nodeCount: 15,
-      completion: 75,
-      preview: {
-        centralNode: 'Mobile App v2.1.0',
-        branches: ['New UI Components', 'Performance Optimization', 'Bug Fixes']
-      },
-      nodes: []
-    },
-    {
-      id: 'release-2',
-      name: 'API Security Hotfix v1.2.1',
-      version: '1.2.1',
-      description: 'Critical security patch for API vulnerabilities.',
-      category: 'hotfix',
-      tags: ['security', 'api', 'critical'],
-      targetDate: '2025-07-25',
-      environment: 'production',
-      createdAt: '2025-07-20T09:00:00.000Z',
-      updatedAt: '2025-07-24T16:45:00.000Z',
-      status: 'closed',
-      statusHistory: [],
-      nodeCount: 6,
-      completion: 100,
-      preview: {
-        centralNode: 'API Security Hotfix',
-        branches: ['SQL Injection Fix', 'Rate Limiting']
-      },
-      nodes: []
-    }
-  ]);
+  // Saved releases catalogue - starts empty
+  const [savedReleases, setSavedReleases] = useState<SavedRelease[]>([]);
 
   const categories = [
     { id: 'all', name: 'All Releases', icon: FolderOpen },

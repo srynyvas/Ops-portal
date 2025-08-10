@@ -568,13 +568,11 @@ export class ReleaseManagementService {
   private static releases: Release[] = [];
   private static initialized = false;
 
-  // Initialize with mock data
+  // Initialize with empty data
   static initialize() {
     if (!this.initialized) {
-      // Generate 10 mock releases
-      for (let i = 1; i <= 10; i++) {
-        this.releases.push(MockDataGenerator.generateRelease(i));
-      }
+      // Start with empty releases array - no mock data
+      this.releases = [];
       this.initialized = true;
     }
   }
