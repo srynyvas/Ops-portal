@@ -3,6 +3,7 @@ export * from './common';
 export * from './dashboard';
 export * from './workflows';
 export * from './releases';
+export * from './release-management';
 
 // Global application types
 export interface AppConfig {
