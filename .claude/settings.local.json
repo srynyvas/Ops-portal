@@ -8,7 +8,15 @@
       "Bash(git push:*)",
       "Bash(git config:*)",
       "Bash(git fetch:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(python:*)",
+      "Bash(pip install:*)",
+      "Bash(where python)",
+      "Bash(C:UserssrynyAppDataLocalProgramsPythonPython311python.exe -m pip install fastapi uvicorn[standard] pydantic python-multipart python-dotenv)",
+      "Bash(curl:*)",
+      "Bash(py -3.11 -m pip install motor pymongo beanie)",
+      "Bash(py:*)",
+      "Bash(docker:*)"
     ],
     "deny": []
   }

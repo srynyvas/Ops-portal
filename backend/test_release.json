@@ -1,0 +1,54 @@
+{
+  "name": "Q4 2024 Release with Nodes",
+  "version": "4.0.0",
+  "description": "Complete release with hierarchical nodes and descriptions",
+  "category": "major",
+  "targetDate": "2024-12-31",
+  "environment": "production",
+  "nodes": [
+    {
+      "id": "root-node",
+      "title": "Q4 Release Root",
+      "type": "release",
+      "color": "bg-purple-600",
+      "icon": "Rocket",
+      "properties": {
+        "description": "This is the main release node with a detailed description stored in MongoDB",
+        "version": "4.0.0",
+        "assignee": "John Doe",
+        "priority": "high",
+        "status": "in-development"
+      },
+      "children": [
+        {
+          "id": "feature-1",
+          "title": "User Authentication",
+          "type": "feature",
+          "color": "bg-blue-600",
+          "icon": "Shield",
+          "properties": {
+            "description": "Implement OAuth2 authentication with Google and GitHub providers. This feature includes SSO capabilities and MFA support.",
+            "assignee": "Jane Smith",
+            "priority": "critical",
+            "status": "testing"
+          },
+          "children": []
+        },
+        {
+          "id": "feature-2",
+          "title": "Analytics Dashboard",
+          "type": "feature",
+          "color": "bg-green-600",
+          "icon": "Chart",
+          "properties": {
+            "description": "Real-time analytics dashboard with customizable widgets and export functionality. Includes performance metrics and user behavior tracking.",
+            "assignee": "Bob Johnson",
+            "priority": "medium",
+            "status": "planning"
+          },
+          "children": []
+        }
+      ]
+    }
+  ]
+}

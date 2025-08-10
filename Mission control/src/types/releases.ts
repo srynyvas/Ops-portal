@@ -46,6 +46,7 @@ export interface Release extends BaseEntity {
   targetDate: string;
   environment: Environment;
   status: 'active' | 'closed' | 'archived';
+  isReopened?: boolean;
   statusHistory: StatusHistory[];
   nodeCount: number;
   completion: number;

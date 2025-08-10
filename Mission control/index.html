@@ -105,7 +105,7 @@
       document.head.appendChild(link);
       
       // Remove loading screen when React app loads
-      window.addEventListener('load', () => {
+      window.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
           const loadingScreen = document.getElementById('loading-screen');
           const body = document.body;
@@ -119,19 +119,20 @@
               body.classList.remove('loading');
             }, 300);
           }
-        }, 500); // Minimum loading time for better UX
+        }, 100); // Reduced loading time
       });
       
-      // Fallback: remove loading screen after 10 seconds
+      // Fallback: remove loading screen after 3 seconds
       setTimeout(() => {
         const loadingScreen = document.getElementById('loading-screen');
         const body = document.body;
         
         if (loadingScreen) {
+          console.log('Removing loading screen via fallback');
           loadingScreen.remove();
           body.classList.remove('loading');
         }
-      }, 10000);
+      }, 3000);
     </script>
     
     <script type="module" src="/src/index.tsx"></script>

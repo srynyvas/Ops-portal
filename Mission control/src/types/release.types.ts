@@ -3,6 +3,15 @@
  * Comprehensive TypeScript interfaces for the Release Management Tool
  */
 
+// GitHub integration info
+export interface GitHubIssueInfo {
+  issue_number?: number;
+  issue_url?: string;
+  issue_id?: number;
+  created_at?: string;
+  last_synced?: string;
+}
+
 // Core node structure
 export interface ReleaseNode {
   id: string;
@@ -16,6 +25,8 @@ export interface ReleaseNode {
   // Visual positioning
   x?: number;
   y?: number;
+  // GitHub integration
+  github_issue?: GitHubIssueInfo;
 }
 
 // Main release structure

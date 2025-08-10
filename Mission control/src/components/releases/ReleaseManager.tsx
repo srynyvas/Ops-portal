@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, Search, Eye, Copy, X, Rocket, Package, Code, Shield, 
   Grid, List, AlertTriangle, Settings, Edit3, Save, ArrowLeft,
-  Check, Minus, Target, User, Calendar, Tag, Trash2
+  Check, Minus, Target, User, Calendar, Tag, Trash2, RefreshCw,
+  Loader2, AlertCircle
 } from 'lucide-react';
 import type { ViewState } from '../../types';
+import { useApiCall } from '../../hooks/useApiCall';
+import { releaseService } from '../../services/releaseService';
+import ReleaseManagementService from '../../services/releaseManagementService';
 
 interface ReleaseManagerProps {
   viewState: ViewState;
@@ -53,59 +57,65 @@ interface Release {
     centralNode: string;
     branches: string[];
   };
-  nodes: ReleaseNode[];
+  nodes?: ReleaseNode[];
 }
 
-export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
-  viewState,
-  onUpdateViewState,
-}) => {
-  // Sample data
-  const [savedReleases] = useState<Release[]>([
-    {
-      id: 'release-1',
-      name: 'Mobile App v2.1.0',
-      version: '2.1.0',
-      description: 'Major mobile app update with new UI components and performance improvements.',
-      category: 'minor',
-      tags: ['mobile', 'ui', 'performance'],
-      targetDate: '2025-08-30',
-      environment: 'staging',
-      createdAt: '2025-07-15T10:00:00.000Z',
-      updatedAt: '2025-07-18T14:30:00.000Z',
-      status: 'active',
-      nodeCount: 15,
-      completion: 75,
-      preview: {
-        centralNode: 'Mobile App v2.1.0',
-        branches: ['New UI Components', 'Performance Optimization', 'Bug Fixes']
-      },
-      nodes: []
-    },
-    {
-      id: 'release-2',
-      name: 'API Security Hotfix v1.2.1',
-      version: '1.2.1',
-      description: 'Critical security patch for API vulnerabilities.',
-      category: 'hotfix',
-      tags: ['security', 'api', 'critical'],
-      targetDate: '2025-07-25',
-      environment: 'production',
-      createdAt: '2025-07-20T09:00:00.000Z',
-      updatedAt: '2025-07-24T16:45:00.000Z',
-      status: 'closed',
-      nodeCount: 6,
-      completion: 100,
-      preview: {
-        centralNode: 'API Security Hotfix v1.2.1',
-        branches: ['SQL Injection Fix', 'Rate Limiting', 'Auth Token Validation']
-      },
-      nodes: []
-    }
-  ]);
-
+export default function ReleaseManager({ viewState, onUpdateViewState }: ReleaseManagerProps) {
+  const [savedReleases, setSavedReleases] = useState<Release[]>([]);
   const [currentView, setCurrentView] = useState<'catalogue' | 'editor'>('catalogue');
   const [currentRelease, setCurrentRelease] = useState<Release | null>(null);
+
+  // API integration hooks
+  const {
+    data: releasesData,
+    loading: loadingReleases,
+    error: releasesError,
+    execute: fetchReleases
+  } = useApiCall(ReleaseManagementService.getReleases);
+
+  const {
+    loading: savingRelease,
+    error: saveError,
+    execute: saveRelease
+  } = useApiCall(ReleaseManagementService.createRelease);
+
+  const {
+    loading: deletingRelease,
+    error: deleteError,
+    execute: deleteRelease
+  } = useApiCall(ReleaseManagementService.deleteRelease);
+
+  // Load releases on mount
+  useEffect(() => {
+    fetchReleases();
+  }, []);
+
+  // Update saved releases when data changes
+  useEffect(() => {
+    if (releasesData) {
+      const formattedReleases = releasesData.map(r => ({
+        id: r.id,
+        name: r.name,
+        version: r.version,
+        description: r.description || '',
+        category: r.type || 'minor',
+        tags: [],
+        targetDate: r.plannedDate ? new Date(r.plannedDate).toISOString() : '',
+        environment: 'production',
+        createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+        updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : new Date().toISOString(),
+        status: r.status,
+        nodeCount: r.features?.length || 0,
+        completion: 0,
+        preview: {
+          centralNode: r.name,
+          branches: r.features?.map(f => f.title) || []
+        },
+        nodes: []
+      }));
+      setSavedReleases(formattedReleases);
+    }
+  }, [releasesData]);
 
   // Configuration
   const environments = [
@@ -184,6 +194,43 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     setCurrentView('editor');
   };
 
+  const handleSaveRelease = async () => {
+    if (!currentRelease) return;
+
+    try {
+      const releaseData = {
+        name: currentRelease.name,
+        version: currentRelease.version,
+        description: currentRelease.description,
+        type: currentRelease.category as any,
+        plannedDate: currentRelease.targetDate ? new Date(currentRelease.targetDate) : undefined,
+        status: 'planning' as any
+      };
+
+      if (currentRelease.id) {
+        await ReleaseManagementService.updateRelease(currentRelease.id, releaseData);
+      } else {
+        await saveRelease(releaseData);
+      }
+
+      await fetchReleases();
+      setCurrentView('catalogue');
+    } catch (error) {
+      console.error('Failed to save release:', error);
+    }
+  };
+
+  const handleDeleteRelease = async (releaseId: string) => {
+    if (!confirm('Are you sure you want to delete this release?')) return;
+
+    try {
+      await deleteRelease(releaseId);
+      await fetchReleases();
+    } catch (error) {
+      console.error('Failed to delete release:', error);
+    }
+  };
+
   // Filter releases
   const filteredReleases = savedReleases.filter(release => {
     const searchQuery = viewState.searchQuery.toLowerCase();
@@ -201,386 +248,359 @@ export const ReleaseManager: React.FC<ReleaseManagerProps> = ({
     return matchesSearch && matchesCategory;
   });
 
-  // Render release card
-  const renderReleaseCard = (release: Release) => (
-    <div key={release.id} className={`bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-all duration-200 hover:shadow-lg ${
-      release.status === 'closed' ? 'opacity-60 bg-gray-50' : ''
-    }`}>
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <h3 className={`text-lg font-semibold ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-800'}`}>
-                {release.name}
-              </h3>
-              <span className={`px-2 py-1 text-xs rounded-full font-medium ${
-                release.status === 'closed' ? 'bg-gray-200 text-gray-600' : 'bg-purple-100 text-purple-700'
-              }`}>
-                v{release.version}
-              </span>
-              {release.status === 'closed' && (
-                <span className="px-2 py-1 bg-gray-200 text-gray-600 text-xs rounded-full">
-                  Closed
-                </span>
-              )}
-            </div>
-            <p className={`text-sm ${release.status === 'closed' ? 'text-gray-500' : 'text-gray-600'}`}>
-              {release.description}
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-1 ml-4">
-            <button
-              onClick={() => loadRelease(release)}
-              className={`p-2 rounded-lg transition-colors ${
-                release.status === 'closed' 
-                  ? 'text-orange-600 hover:bg-orange-50' 
-                  : 'text-purple-600 hover:bg-purple-50'
-              }`}
-              title={release.status === 'closed' ? 'Reopen release' : 'Open release'}
-            >
-              <Eye size={16} />
-            </button>
-            <button
-              className="p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-              title="Duplicate release"
-            >
-              <Copy size={16} />
-            </button>
-          </div>
+  // Render loading state
+  if (loadingReleases && savedReleases.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Loading releases...</p>
         </div>
+      </div>
+    );
+  }
 
-        {/* Progress */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-            <span>Progress</span>
-            <span>{release.completion || 0}% complete</span>
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div 
-              className={`h-2 rounded-full transition-all ${release.status === 'closed' ? 'bg-gray-400' : 'bg-purple-600'}`}
-              style={{ width: `${release.completion || 0}%` }}
-            />
-          </div>
-          <div className="flex items-center justify-between mt-2">
-            <span className={`px-2 py-1 text-xs rounded-full ${
-              environments.find(e => e.id === release.environment)?.color || 'bg-gray-100 text-gray-600'
-            }`}>
-              {environments.find(e => e.id === release.environment)?.name || release.environment}
-            </span>
-            {release.targetDate && (
-              <span className="text-xs text-gray-500">
-                Target: {new Date(release.targetDate).toLocaleDateString()}
-              </span>
-            )}
-          </div>
+  // Render error state
+  if (releasesError) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Releases</h3>
+          <p className="text-gray-600 mb-4">
+            {releasesError.message || 'Unable to connect to the backend API. Please check your configuration.'}
+          </p>
+          <button
+            onClick={() => fetchReleases()}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </button>
         </div>
+      </div>
+    );
+  }
 
-        {/* Preview */}
-        <div className={`rounded-lg p-3 mb-3 ${release.status === 'closed' ? 'bg-gray-100' : 'bg-gray-50'}`}>
-          <div className="text-xs text-gray-600 mb-2">Features</div>
-          <div className="text-sm">
-            <div className={`font-medium mb-1 ${release.status === 'closed' ? 'text-gray-500' : 'text-purple-600'}`}>
-              {release.preview?.centralNode || 'No content'}
+  return (
+    <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
+      {currentView === 'catalogue' ? (
+        <>
+          {/* Header */}
+          <div className="bg-white border-b px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <h2 className="text-xl font-semibold text-gray-900">Release Catalogue</h2>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleViewModeChange('grid')}
+                    className={`p-2 rounded-lg ${
+                      viewState.viewMode === 'grid' 
+                        ? 'bg-blue-100 text-blue-600' 
+                        : 'text-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Grid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleViewModeChange('list')}
+                    className={`p-2 rounded-lg ${
+                      viewState.viewMode === 'list' 
+                        ? 'bg-blue-100 text-blue-600' 
+                        : 'text-gray-400 hover:bg-gray-100'
+                    }`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => fetchReleases()}
+                  className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"
+                  disabled={loadingReleases}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingReleases ? 'animate-spin' : ''}`} />
+                </button>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Search releases..."
+                    value={viewState.searchQuery}
+                    onChange={(e) => handleSearch(e.target.value)}
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                  />
+                </div>
+                <button
+                  onClick={createNewRelease}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  New Release
+                </button>
+              </div>
             </div>
-            {release.preview?.branches && release.preview.branches.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {release.preview.branches.map((branch, index) => (
-                  <span key={index} className={`px-2 py-1 rounded text-xs ${
-                    release.status === 'closed' 
-                      ? 'bg-gray-200 text-gray-500' 
-                      : 'bg-white text-gray-600'
-                  }`}>
-                    {branch}
-                  </span>
+
+            {/* Category Tabs */}
+            <div className="flex items-center space-x-1 mt-4">
+              {categories.map(category => (
+                <button
+                  key={category.id}
+                  onClick={() => onUpdateViewState({ 
+                    activeFilters: { ...viewState.activeFilters, category: category.id }
+                  })}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    (viewState.activeFilters?.category || 'all') === category.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Error Messages */}
+          {(saveError || deleteError) && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 m-4 rounded-lg">
+              <div className="flex items-center">
+                <AlertCircle className="w-4 h-4 mr-2" />
+                {saveError?.message || deleteError?.message}
+              </div>
+            </div>
+          )}
+
+          {/* Release Grid/List */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {filteredReleases.length === 0 ? (
+              <div className="text-center py-12">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No releases found</h3>
+                <p className="text-gray-600 mb-4">
+                  {viewState.searchQuery 
+                    ? 'Try adjusting your search or filters'
+                    : 'Get started by creating your first release'}
+                </p>
+                {!viewState.searchQuery && (
+                  <button
+                    onClick={createNewRelease}
+                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create First Release
+                  </button>
+                )}
+              </div>
+            ) : viewState.viewMode === 'grid' ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {filteredReleases.map(release => (
+                  <div
+                    key={release.id}
+                    className="bg-white rounded-lg border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer"
+                  >
+                    <div className="p-4" onClick={() => loadRelease(release)}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center">
+                          <Rocket className="w-5 h-5 text-purple-600 mr-2" />
+                          <h3 className="font-semibold text-gray-900">{release.name}</h3>
+                        </div>
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          environments.find(e => e.id === release.environment)?.color || 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {release.environment}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 mb-3 line-clamp-2">{release.description || 'No description'}</p>
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-500">v{release.version}</span>
+                        <span className="text-gray-500">
+                          {release.nodeCount || 0} items
+                        </span>
+                      </div>
+                      {release.tags.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-3">
+                          {release.tags.slice(0, 3).map(tag => (
+                            <span key={tag} className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="px-4 py-2 bg-gray-50 border-t flex justify-between">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          loadRelease(release);
+                        }}
+                        className="text-sm text-blue-600 hover:text-blue-800"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (release.id) handleDeleteRelease(release.id);
+                        }}
+                        className="text-sm text-red-600 hover:text-red-800"
+                        disabled={deletingRelease}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-lg border border-gray-200">
+                {filteredReleases.map((release, index) => (
+                  <div
+                    key={release.id}
+                    className={`p-4 hover:bg-gray-50 cursor-pointer ${
+                      index !== filteredReleases.length - 1 ? 'border-b' : ''
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-4" onClick={() => loadRelease(release)}>
+                        <Rocket className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <h3 className="font-semibold text-gray-900">{release.name}</h3>
+                          <p className="text-sm text-gray-600">v{release.version} • {release.nodeCount || 0} items</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-3">
+                        <span className={`px-2 py-1 text-xs rounded-full ${
+                          environments.find(e => e.id === release.environment)?.color || 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {release.environment}
+                        </span>
+                        <button
+                          onClick={() => loadRelease(release)}
+                          className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (release.id) handleDeleteRelease(release.id);
+                          }}
+                          className="p-2 text-red-400 hover:bg-red-50 rounded-lg"
+                          disabled={deletingRelease}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
           </div>
-        </div>
+        </>
+      ) : (
+        // Editor View
+        <div className="flex-1 flex flex-col">
+          <div className="bg-white border-b px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setCurrentView('catalogue')}
+                  className="p-2 hover:bg-gray-100 rounded-lg"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <input
+                  type="text"
+                  value={currentRelease?.name || ''}
+                  onChange={(e) => setCurrentRelease(prev => prev ? {...prev, name: e.target.value} : null)}
+                  className="text-xl font-semibold bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none px-1"
+                />
+              </div>
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={handleSaveRelease}
+                  disabled={savingRelease}
+                  className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                >
+                  {savingRelease ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Save Release
+                </button>
+              </div>
+            </div>
+          </div>
 
-        {/* Tags and metadata */}
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <div className="flex flex-wrap gap-1">
-            {release.tags.slice(0, 3).map((tag, index) => (
-              <span key={index} className={`px-2 py-1 rounded ${
-                release.status === 'closed' 
-                  ? 'bg-gray-200 text-gray-600' 
-                  : 'bg-blue-100 text-blue-700'
-              }`}>
-                {tag}
-              </span>
-            ))}
-            {release.tags.length > 3 && (
-              <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded">
-                +{release.tags.length - 3}
-              </span>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <span>{release.nodeCount || 0} items</span>
-            <span>{new Date(release.updatedAt).toLocaleDateString()}</span>
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-4xl mx-auto">
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h3 className="text-lg font-semibold mb-4">Release Details</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Version</label>
+                    <input
+                      type="text"
+                      value={currentRelease?.version || ''}
+                      onChange={(e) => setCurrentRelease(prev => prev ? {...prev, version: e.target.value} : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <textarea
+                      value={currentRelease?.description || ''}
+                      onChange={(e) => setCurrentRelease(prev => prev ? {...prev, description: e.target.value} : null)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <select
+                      value={currentRelease?.category || 'minor'}
+                      onChange={(e) => setCurrentRelease(prev => prev ? {...prev, category: e.target.value} : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {categories.filter(c => c.id !== 'all').map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Target Date</label>
+                    <input
+                      type="date"
+                      value={currentRelease?.targetDate ? currentRelease.targetDate.split('T')[0] : ''}
+                      onChange={(e) => setCurrentRelease(prev => prev ? {...prev, targetDate: e.target.value} : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Environment</label>
+                    <select
+                      value={currentRelease?.environment || 'development'}
+                      onChange={(e) => setCurrentRelease(prev => prev ? {...prev, environment: e.target.value} : null)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {environments.map(env => (
+                        <option key={env.id} value={env.id}>
+                          {env.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
-
-  // Main render - Catalogue view
-  if (currentView === 'catalogue') {
-    return (
-      <div className="h-full bg-gray-50">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <Rocket size={28} className="text-purple-600" />
-                Release Management
-              </h1>
-              <p className="text-gray-600 mt-1">Manage software releases, features, and tasks</p>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => handleViewModeChange(viewState.viewMode === 'grid' ? 'list' : 'grid')}
-                className="p-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors"
-                title={`Switch to ${viewState.viewMode === 'grid' ? 'list' : 'grid'} view`}
-              >
-                {viewState.viewMode === 'grid' ? <List size={20} /> : <Grid size={20} />}
-              </button>
-              
-              <button
-                onClick={createNewRelease}
-                className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors font-medium flex items-center gap-2"
-              >
-                <Plus size={20} />
-                New Release
-              </button>
-            </div>
-          </div>
-
-          {/* Search and Filter */}
-          <div className="flex items-center gap-4 mt-4">
-            <div className="relative flex-1 max-w-md">
-              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                value={viewState.searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
-                placeholder="Search releases..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-              />
-            </div>
-
-            <select
-              value={viewState.activeFilters?.category || 'all'}
-              onChange={(e) => onUpdateViewState({ 
-                activeFilters: { ...viewState.activeFilters, category: e.target.value }
-              })}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-            >
-              {categories.map(category => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-        
-        {/* Content */}
-        <div className="p-6">
-          {filteredReleases.length === 0 ? (
-            <div className="text-center py-12">
-              <Rocket size={48} className="mx-auto text-gray-400 mb-4" />
-              <h3 className="text-xl font-semibold text-gray-600 mb-2">
-                {viewState.searchQuery ? 'No releases found' : 'No releases yet'}
-              </h3>
-              <p className="text-gray-500 mb-6">
-                {viewState.searchQuery 
-                  ? 'Try adjusting your search or filters' 
-                  : 'Create your first release to get started'}
-              </p>
-              <button
-                onClick={createNewRelease}
-                className="bg-purple-600 text-white px-6 py-3 rounded-lg hover:bg-purple-700 transition-colors font-medium"
-              >
-                Create New Release
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-gray-600">
-                  {filteredReleases.length} release{filteredReleases.length !== 1 ? 's' : ''} found
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredReleases.map(renderReleaseCard)}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Main render - Editor view (Mind Map)
-  if (currentView === 'editor' && currentRelease) {
-    return (
-      <div className="h-full bg-gradient-to-br from-gray-50 to-gray-100 relative">
-        {/* Editor Header */}
-        <div className="absolute top-4 left-4 z-10">
-          <div className="flex items-center gap-4 mb-2">
-            <button
-              onClick={() => setCurrentView('catalogue')}
-              className="flex items-center gap-2 px-3 py-2 bg-white/80 backdrop-blur-sm rounded-lg hover:bg-white transition-colors"
-            >
-              <ArrowLeft size={16} />
-              <span className="text-sm font-medium">Back to Catalogue</span>
-            </button>
-            
-            <button
-              className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              <Save size={16} />
-              <span className="text-sm font-medium">Save Release</span>
-            </button>
-          </div>
-          
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-            {currentRelease.name}
-            {currentRelease.version && (
-              <span className="px-3 py-1 bg-purple-100 text-purple-700 text-sm rounded-full font-medium">
-                v{currentRelease.version}
-              </span>
-            )}
-          </h1>
-          {currentRelease.description && (
-            <p className="text-sm text-gray-600 bg-white/80 backdrop-blur-sm rounded-lg p-3 max-w-md mt-2">
-              {currentRelease.description}
-            </p>
-          )}
-        </div>
-
-        {/* Mind Map Canvas - Fixed Layout */}
-        <div className="w-full h-full overflow-hidden relative">
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="relative">
-              {/* Central Node */}
-              {currentRelease.nodes.length > 0 && (
-                <div className="relative">
-                  <div className="w-64 h-40 bg-purple-600 text-white rounded-xl shadow-lg flex flex-col justify-center items-center p-4 relative">
-                    <div className="absolute top-2 right-2 flex gap-1">
-                      <button className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">
-                        <Settings size={12} />
-                      </button>
-                      <button className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">
-                        <Plus size={12} />
-                      </button>
-                    </div>
-                    
-                    <Rocket size={26} className="mb-2" />
-                    <h3 className="text-lg font-bold text-center leading-tight">
-                      {currentRelease.nodes[0].title}
-                    </h3>
-                    
-                    {currentRelease.nodes[0].properties.version && (
-                      <span className="text-xs bg-white/20 px-2 py-1 rounded-full mt-2">
-                        v{currentRelease.nodes[0].properties.version}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Feature Nodes */}
-                  {currentRelease.nodes[0].children && currentRelease.nodes[0].children.map((child, index) => {
-                    const angle = (index * 90) - 45; // Spread around the center
-                    const radius = 300;
-                    const x = Math.cos(angle * Math.PI / 180) * radius;
-                    const y = Math.sin(angle * Math.PI / 180) * radius;
-                    
-                    return (
-                      <div key={child.id} className="absolute" style={{ 
-                        left: `calc(50% + ${x}px - 104px)`, 
-                        top: `calc(50% + ${y}px - 64px)` 
-                      }}>
-                        {/* Connection Line */}
-                        <svg className="absolute inset-0 pointer-events-none" style={{
-                          left: x > 0 ? -x : 0,
-                          top: y > 0 ? -y : 0,
-                          width: Math.abs(x) + 208,
-                          height: Math.abs(y) + 128
-                        }}>
-                          <line
-                            x1={x > 0 ? 0 : Math.abs(x)}
-                            y1={y > 0 ? 0 : Math.abs(y)}
-                            x2={x > 0 ? Math.abs(x) : 0}
-                            y2={y > 0 ? Math.abs(y) : 0}
-                            stroke="#e5e7eb"
-                            strokeWidth="2"
-                          />
-                        </svg>
-                        
-                        <div className="w-52 h-32 bg-blue-600 text-white rounded-xl shadow-lg flex flex-col justify-center items-center p-4 relative hover:scale-105 transition-transform cursor-pointer">
-                          <div className="absolute top-2 right-2 flex gap-1">
-                            <button className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">
-                              <Settings size={10} />
-                            </button>
-                            <button className="w-5 h-5 bg-white/20 rounded-full flex items-center justify-center hover:bg-white/30">
-                              <Plus size={10} />
-                            </button>
-                          </div>
-                          
-                          <Package size={22} className="mb-2" />
-                          <h4 className="text-md font-semibold text-center leading-tight">
-                            {child.title}
-                          </h4>
-                          
-                          {child.properties.assignee && (
-                            <span className="text-xs bg-white/20 px-2 py-1 rounded mt-1">
-                              {child.properties.assignee}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Empty State */}
-              {currentRelease.nodes.length === 0 && (
-                <div className="text-center">
-                  <div className="w-24 h-24 bg-gray-200 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Rocket size={32} className="text-gray-400" />
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-600 mb-2">No items yet!</h2>
-                  <p className="text-gray-500 mb-4">Add a release to get started</p>
-                  <button className="bg-purple-500 text-white px-6 py-3 rounded-lg hover:bg-purple-600 transition-colors font-medium">
-                    Create Release Node
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Fallback
-  return (
-    <div className="h-full flex items-center justify-center">
-      <div className="text-center">
-        <Rocket size={48} className="mx-auto text-gray-400 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-600">Release Manager</h2>
-        <p className="text-gray-500">Loading...</p>
-      </div>
-    </div>
-  );
-};
-
-export default ReleaseManager;
+}

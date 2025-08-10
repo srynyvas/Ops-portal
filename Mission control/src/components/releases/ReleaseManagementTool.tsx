@@ -1,4 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { apiClient } from '../../services/apiClient';
+import { apiConfig } from '../../config/apiConfig';
 import { 
   Plus, Minus, Lightbulb, Target, Users, FileText, Folder, Trash2, 
   Edit3, Palette, Settings, Heart, Star, Zap, Coffee, Music, 
@@ -7,7 +9,8 @@ import {
   ExternalLink, Info, Clock, Library, Search, Copy, Download,
   Upload, ArrowLeft, Grid, List, Filter, Eye, Edit, FolderOpen,
   GitBranch, Package, Code, Bug, CheckCircle, AlertCircle,
-  Play, Pause, RotateCcw, TrendingUp, Layers, Terminal, ChevronRight, ChevronDown
+  Play, Pause, RotateCcw, TrendingUp, Layers, Terminal, ChevronRight, ChevronDown,
+  Move, Hand, ZoomIn, ZoomOut, Maximize2, Github, RefreshCw, Send
 } from 'lucide-react';
 
 // Import types
@@ -167,10 +170,99 @@ const ReleaseManagementTool: React.FC = () => {
   // Refs
   const canvasRef = useRef<HTMLDivElement>(null);
 
+  // Zoom and Pan state and handlers
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [panMode, setPanMode] = useState(false); // Toggle for pan mode
+  
+  // Loading states
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  
+  // GitHub integration state
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [githubConfigured, setGithubConfigured] = useState(false);
+  const [githubConfig, setGithubConfig] = useState<any>(null);
+
+  // Handle mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      setViewState(prev => ({
+        ...prev,
+        zoom: Math.min(Math.max(prev.zoom * delta, 0.25), 3)
+      }));
+    }
+  }, []);
+
+  // Handle panning mouse events
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Pan with middle mouse, Shift+Left click, or in pan mode with left click
+    if (e.button === 1 || (e.button === 0 && e.shiftKey) || (e.button === 0 && panMode)) {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - viewState.panX, y: e.clientY - viewState.panY });
+      e.preventDefault();
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isPanning) {
+      setViewState(prev => ({
+        ...prev,
+        panX: e.clientX - panStart.x,
+        panY: e.clientY - panStart.y
+      }));
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsPanning(false);
+  };
+
   // Save to localStorage whenever savedReleases changes
   useEffect(() => {
     localStorage.setItem('releaseManagementReleases', JSON.stringify(savedReleases));
   }, [savedReleases]);
+
+  // Fetch releases from backend on mount
+  useEffect(() => {
+    const fetchReleases = async () => {
+      try {
+        const releases = await apiClient.get<Release[]>(apiConfig.endpoints.releases.list);
+        setSavedReleases(releases);
+      } catch (error) {
+        console.error('Failed to fetch releases:', error);
+        // Fall back to localStorage if API fails
+        const stored = localStorage.getItem('releaseManagementReleases');
+        if (stored) {
+          setSavedReleases(JSON.parse(stored));
+        }
+      }
+    };
+    
+    fetchReleases();
+  }, []);
+
+  // Check GitHub configuration status
+  useEffect(() => {
+    const checkGitHubConfig = async () => {
+      try {
+        const response = await apiClient.get<any>('/github/config-status');
+        setGithubConfigured(response.configured);
+        setGithubConfig(response);
+      } catch (error) {
+        console.error('Failed to check GitHub config:', error);
+        setGithubConfigured(false);
+        setGithubConfig(null);
+      }
+    };
+    
+    checkGitHubConfig();
+  }, []);
 
   // Auto-save current release every 30 seconds
   useEffect(() => {
@@ -185,47 +277,170 @@ const ReleaseManagementTool: React.FC = () => {
   }, [currentRelease]);
 
   // Release Management Functions
-  const saveCurrentRelease = () => {
-    const releaseToSave: Release = {
-      ...currentRelease,
-      id: currentRelease.id || generateNodeId(),
-      name: saveFormData.name,
-      version: saveFormData.version,
-      description: saveFormData.description,
-      category: saveFormData.category,
-      tags: saveFormData.tags,
-      targetDate: saveFormData.targetDate,
-      environment: saveFormData.environment,
-      updatedAt: new Date().toISOString(),
-      nodeCount: countTotalNodes(currentRelease.nodes),
-      completion: calculateCompletion(currentRelease.nodes),
-      preview: generatePreview(currentRelease.nodes)
-    };
+  const saveCurrentRelease = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    
+    try {
+      const releaseToSave: Release = {
+        ...currentRelease,
+        id: currentRelease.id || generateNodeId(),
+        name: saveFormData.name,
+        version: saveFormData.version,
+        description: saveFormData.description,
+        category: saveFormData.category,
+        tags: saveFormData.tags,
+        targetDate: saveFormData.targetDate,
+        environment: saveFormData.environment,
+        updatedAt: new Date().toISOString(),
+        nodeCount: countTotalNodes(currentRelease.nodes),
+        completion: calculateCompletion(currentRelease.nodes),
+        preview: generatePreview(currentRelease.nodes)
+      };
 
-    if (currentRelease.id) {
-      setSavedReleases(prev => 
-        prev.map(r => r.id === currentRelease.id ? releaseToSave : r)
-      );
-    } else {
-      setSavedReleases(prev => [...prev, releaseToSave]);
+      let savedRelease: Release;
+      
+      if (currentRelease.id) {
+        // Update existing release
+        savedRelease = await apiClient.put<Release>(
+          apiConfig.endpoints.releases.update,
+          releaseToSave,
+          { params: { id: currentRelease.id } }
+        );
+        setSavedReleases(prev => 
+          prev.map(r => r.id === currentRelease.id ? savedRelease : r)
+        );
+      } else {
+        // Create new release
+        savedRelease = await apiClient.post<Release>(
+          apiConfig.endpoints.releases.create,
+          releaseToSave
+        );
+        setSavedReleases(prev => [...prev, savedRelease]);
+      }
+
+      setCurrentRelease(savedRelease);
+      setModalState(prev => ({ ...prev, showSaveDialog: false }));
+      setSaveFormData({
+        name: '',
+        version: '',
+        description: '',
+        category: 'minor',
+        tags: [],
+        targetDate: '',
+        environment: 'development'
+      });
+    } catch (error) {
+      console.error('Failed to save release:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save release');
+    } finally {
+      setIsSaving(false);
     }
-
-    setCurrentRelease(releaseToSave);
-    setModalState(prev => ({ ...prev, showSaveDialog: false }));
-    setSaveFormData({
-      name: '',
-      version: '',
-      description: '',
-      category: 'minor',
-      tags: [],
-      targetDate: '',
-      environment: 'development'
-    });
   };
 
-  const loadRelease = (release: Release) => {
-    setCurrentRelease(release);
-    setViewState(prev => ({ ...prev, currentView: 'editor' }));
+  const publishToGitHub = async () => {
+    if (!currentRelease.id) {
+      setPublishError('Please save the release first');
+      return;
+    }
+    
+    setIsPublishing(true);
+    setPublishError(null);
+    
+    try {
+      const response = await apiClient.post<any>(
+        `/releases/${currentRelease.id}/publish-to-github`,
+        {}
+      );
+      
+      if (response.success) {
+        // Update current release with GitHub issue info
+        const updatedRelease = await apiClient.get<Release>(
+          `/releases/${currentRelease.id}`
+        );
+        setCurrentRelease(updatedRelease);
+        
+        // Show success message with details
+        const message = `Successfully published to GitHub!\n\n` +
+          `Created Issues: ${response.created_issues.length}\n` +
+          `${response.created_issues.map((issue: any) => 
+            `  • ${issue.node_title}: Issue #${issue.issue_number}`
+          ).join('\n')}`;
+        alert(message);
+      } else {
+        setPublishError(response.message || 'Failed to publish to GitHub');
+      }
+    } catch (error) {
+      console.error('Failed to publish to GitHub:', error);
+      setPublishError(error instanceof Error ? error.message : 'Failed to publish to GitHub');
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const syncNodeWithGitHub = async (nodeId: string, newStatus: string) => {
+    if (!currentRelease.id) {
+      return;
+    }
+    
+    try {
+      await apiClient.post<any>(
+        `/releases/${currentRelease.id}/nodes/${nodeId}/sync-github`,
+        { status: newStatus }
+      );
+    } catch (error) {
+      console.error('Failed to sync with GitHub:', error);
+      // Don't show error to user, sync is optional
+    }
+  };
+
+  const closeAllGitHubIssues = async (release: Release) => {
+    try {
+      const response = await apiClient.post<any>(
+        `/releases/${release.id}/close-github-issues`,
+        {}
+      );
+      
+      if (response.success) {
+        console.log(`Successfully closed ${response.closed_issues.length} GitHub issues`);
+      } else {
+        console.warn(`Some issues failed to close:`, response.failed_issues);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('Failed to close GitHub issues:', error);
+      // Don't throw - closing GitHub issues is optional
+      return { success: false, error };
+    }
+  };
+
+  const loadRelease = async (release: Release) => {
+    if (!release.id) {
+      setCurrentRelease(release);
+      setViewState(prev => ({ ...prev, currentView: 'editor' }));
+      return;
+    }
+    
+    setIsLoading(true);
+    setLoadError(null);
+    
+    try {
+      const loadedRelease = await apiClient.get<Release>(
+        apiConfig.endpoints.releases.get,
+        { params: { id: release.id } }
+      );
+      setCurrentRelease(loadedRelease);
+      setViewState(prev => ({ ...prev, currentView: 'editor' }));
+    } catch (error) {
+      console.error('Failed to load release:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load release');
+      // Fall back to local data if API fails
+      setCurrentRelease(release);
+      setViewState(prev => ({ ...prev, currentView: 'editor' }));
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const createNewRelease = () => {
@@ -291,7 +506,7 @@ const ReleaseManagementTool: React.FC = () => {
     setViewState(prev => ({ ...prev, currentView: 'editor' }));
   };
 
-  const closeRelease = () => {
+  const closeRelease = async () => {
     if (!currentRelease.id) return;
     
     const closedRelease: Release = {
@@ -311,54 +526,95 @@ const ReleaseManagementTool: React.FC = () => {
       ]
     };
     
-    setSavedReleases(prev => 
-      prev.map(r => r.id === currentRelease.id ? closedRelease : r)
-    );
-    setModalState(prev => ({ ...prev, showCloseDialog: false }));
-    setViewState(prev => ({ ...prev, currentView: 'catalogue' }));
-    setCloseFormData({ reason: '', notifyStakeholders: false });
+    try {
+      // Update in MongoDB
+      await apiClient.put<Release>(
+        `/releases/${currentRelease.id}`,
+        closedRelease
+      );
+      
+      // Close all GitHub issues if they exist
+      if (githubConfigured) {
+        await closeAllGitHubIssues(closedRelease);
+      }
+      
+      // Update local state
+      setSavedReleases(prev => 
+        prev.map(r => r.id === currentRelease.id ? closedRelease : r)
+      );
+      
+      setModalState(prev => ({ ...prev, showCloseDialog: false }));
+      setViewState(prev => ({ ...prev, currentView: 'catalogue' }));
+      setCloseFormData({ reason: '', notifyStakeholders: false });
+      
+      alert('Release closed successfully!');
+    } catch (error) {
+      console.error('Failed to close release:', error);
+      alert('Failed to close release. Please try again.');
+    }
   };
 
-  const reopenRelease = (release: Release) => {
-    const reopenedRelease: Release = {
-      ...release,
-      status: 'active',
-      updatedAt: new Date().toISOString(),
-      statusHistory: [
-        ...release.statusHistory,
-        {
-          action: 'reopened',
-          reason: reopenFormData.reason,
-          timestamp: new Date().toISOString(),
-          user: 'Current User',
-          previousStatus: 'closed',
-          newStatus: 'active'
-        }
-      ]
-    };
-    
-    if (reopenFormData.resetProgress) {
-      // Reset all task statuses to planning
-      const resetNodes = (nodes: ReleaseNode[]): ReleaseNode[] => {
-        return nodes.map(node => ({
-          ...node,
-          properties: {
-            ...node.properties,
-            status: 'planning'
-          },
-          children: resetNodes(node.children || [])
-        }));
-      };
-      reopenedRelease.nodes = resetNodes(reopenedRelease.nodes);
+  const reopenRelease = async () => {
+    if (!currentRelease || !reopenFormData.reason) {
+      alert('Please provide a reason for reopening the release');
+      return;
     }
     
-    setSavedReleases(prev => 
-      prev.map(r => r.id === release.id ? reopenedRelease : r)
-    );
-    setCurrentRelease(reopenedRelease);
-    setModalState(prev => ({ ...prev, showReopenDialog: false }));
-    setViewState(prev => ({ ...prev, currentView: 'editor' }));
-    setReopenFormData({ reason: '', resetProgress: false });
+    try {
+      const reopenedRelease: Release = {
+        ...currentRelease,
+        status: 'active',
+        isReopened: true,
+        updatedAt: new Date().toISOString(),
+        statusHistory: [
+          ...currentRelease.statusHistory,
+          {
+            action: 'reopened',
+            reason: reopenFormData.reason,
+            timestamp: new Date().toISOString(),
+            user: 'Current User',
+            previousStatus: 'closed',
+            newStatus: 'active'
+          }
+        ]
+      };
+      
+      if (reopenFormData.resetProgress) {
+        // Reset all task statuses to planning
+        const resetNodes = (nodes: ReleaseNode[]): ReleaseNode[] => {
+          return nodes.map(node => ({
+            ...node,
+            properties: {
+              ...node.properties,
+              status: 'planning'
+            },
+            children: resetNodes(node.children || [])
+          }));
+        };
+        reopenedRelease.nodes = resetNodes(reopenedRelease.nodes);
+        reopenedRelease.completion = 0; // Reset completion to 0 if progress is reset
+      }
+      
+      // Save to MongoDB
+      await apiClient.put<Release>(
+        `/releases/${currentRelease.id}`,
+        reopenedRelease
+      );
+      
+      // Update local state
+      setSavedReleases(prev => 
+        prev.map(r => r.id === currentRelease.id ? reopenedRelease : r)
+      );
+      setCurrentRelease(reopenedRelease);
+      setModalState(prev => ({ ...prev, showReopenDialog: false }));
+      setViewState(prev => ({ ...prev, currentView: 'editor' }));
+      setReopenFormData({ reason: '', resetProgress: false });
+      
+      alert('Release reopened successfully!');
+    } catch (error) {
+      console.error('Failed to reopen release:', error);
+      alert('Failed to reopen release. Please try again.');
+    }
   };
 
   // Node Management Functions
@@ -586,13 +842,119 @@ const ReleaseManagementTool: React.FC = () => {
     return filterState.sortOrder === 'asc' ? compareValue : -compareValue;
   });
 
+  // Auto-align all nodes to prevent overlap
+  const autoAlignNodes = () => {
+    // Force re-render with recalculated positions
+    setCurrentRelease(prev => ({
+      ...prev,
+      nodes: [...prev.nodes]
+    }));
+  };
+
+  // Zoom controls
+  const handleZoomIn = () => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: Math.min(prev.zoom * 1.2, 3) // Max zoom 3x
+    }));
+  };
+
+  const handleZoomOut = () => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: Math.max(prev.zoom * 0.8, 0.25) // Min zoom 0.25x
+    }));
+  };
+
+  const handleZoomReset = () => {
+    setViewState(prev => ({
+      ...prev,
+      zoom: 1,
+      panX: 0,
+      panY: 0
+    }));
+  };
+
+  const handleZoomFit = () => {
+    // Calculate bounds of all nodes
+    if (currentRelease.nodes.length === 0) return;
+    
+    // Simple fit to view - assumes a reasonable default size
+    const estimatedWidth = 1200; // Estimate based on node depths
+    const estimatedHeight = calculateNodeHeight(currentRelease.nodes[0]) * 2;
+    
+    const canvasWidth = window.innerWidth - 100;
+    const canvasHeight = window.innerHeight - 200;
+    
+    const scaleX = canvasWidth / estimatedWidth;
+    const scaleY = canvasHeight / estimatedHeight;
+    const scale = Math.min(scaleX, scaleY, 1);
+    
+    setViewState(prev => ({
+      ...prev,
+      zoom: scale,
+      panX: 0,
+      panY: 0
+    }));
+  };
+
+  // Calculate total height needed for a node and its subtree
+  const calculateNodeHeight = (node: ReleaseNode): number => {
+    if (!node.expanded || !node.children || node.children.length === 0) {
+      // Base height for a single node
+      switch (node.type) {
+        case 'release': return 160;
+        case 'feature': return 140;
+        case 'task': return 120;
+        default: return 120;
+      }
+    }
+    
+    // Calculate total height needed for all children
+    const childrenHeight = node.children.reduce((total, child) => {
+      return total + calculateNodeHeight(child);
+    }, 0);
+    
+    // Add spacing between children
+    const spacing = 40; // Minimum spacing between nodes
+    const totalChildrenHeight = childrenHeight + (node.children.length - 1) * spacing;
+    
+    // Return the maximum of node's own height or children's total height
+    const nodeHeight = node.type === 'release' ? 160 : node.type === 'feature' ? 140 : 120;
+    return Math.max(nodeHeight, totalChildrenHeight);
+  };
+
+  // Calculate Y positions for children to avoid overlap
+  const calculateChildPositions = (node: ReleaseNode, parentY: number): number[] => {
+    if (!node.children || node.children.length === 0) return [];
+    
+    const positions: number[] = [];
+    const totalHeight = calculateNodeHeight(node);
+    const spacing = 40;
+    
+    let currentY = parentY - totalHeight / 2;
+    
+    node.children.forEach((child) => {
+      const childHeight = calculateNodeHeight(child);
+      currentY += childHeight / 2;
+      positions.push(currentY);
+      currentY += childHeight / 2 + spacing;
+    });
+    
+    // Center the children around the parent
+    const averageY = positions.reduce((sum, y) => sum + y, 0) / positions.length;
+    const offset = parentY - averageY;
+    
+    return positions.map(y => y + offset);
+  };
+
   // Render Helper Functions
   const getNodeIcon = (iconName: string) => {
     const IconComponent = releaseIcons[iconName as keyof typeof releaseIcons];
     return IconComponent || Package;
   };
 
-  const renderNode = (node: ReleaseNode, level = 0, offsetX = 0, offsetY = 0) => {
+  const renderNode = (node: ReleaseNode, level = 0, offsetX = 0, offsetY = 0, childPositions?: number[]) => {
     const isEditing = editingNode === node.id;
     const isCustomizing = customizingNode === node.id;
     const isDropTarget = dragState.dropTarget === node.id;
@@ -778,18 +1140,36 @@ const ReleaseManagementTool: React.FC = () => {
                     {new Date(node.properties.targetDate).toLocaleDateString()}
                   </span>
                 )}
+                {node.github_issue?.issue_number && (
+                  <a 
+                    href={node.github_issue.issue_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 hover:text-white transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                    title={`GitHub Issue #${node.github_issue.issue_number}`}
+                  >
+                    <Github size={10} />
+                    #{node.github_issue.issue_number}
+                  </a>
+                )}
               </div>
             </div>
           </div>
         </div>
         
         {/* Child Nodes */}
-        {node.expanded && hasChildren && node.children.map((child, childIndex) => {
+        {node.expanded && hasChildren && (() => {
           const childOffsetX = offsetX + 320;
-          const childOffsetY = offsetY + (childIndex - (node.children.length - 1) / 2) * 160;
+          const childYPositions = calculateChildPositions(node, offsetY);
           
-          return renderNode(child, level + 1, childOffsetX, childOffsetY);
-        })}
+          return node.children.map((child, childIndex) => {
+            const childOffsetY = childYPositions[childIndex] || offsetY;
+            const grandchildPositions = child.children ? calculateChildPositions(child, childOffsetY) : undefined;
+            
+            return renderNode(child, level + 1, childOffsetX, childOffsetY, grandchildPositions);
+          });
+        })()}
         
         {/* Customization Panel */}
         {isCustomizing && (
@@ -931,9 +1311,11 @@ const ReleaseManagementTool: React.FC = () => {
   const renderConnections = (node: ReleaseNode, level = 0, parentX = 0, parentY = 0): React.ReactNode => {
     if (!node.expanded || !node.children || node.children.length === 0) return null;
 
+    const childYPositions = calculateChildPositions(node, parentY);
+    
     return node.children.map((child, index) => {
       const childX = 320;
-      const childY = (index - (node.children.length - 1) / 2) * 160;
+      const childY = childYPositions[index] - parentY;
 
       return (
         <g key={`connection-${child.id}`}>
@@ -946,7 +1328,7 @@ const ReleaseManagementTool: React.FC = () => {
             strokeWidth="2"
             className="transition-all duration-300"
           />
-          {renderConnections(child, level + 1, parentX + childX, parentY + childY)}
+          {renderConnections(child, level + 1, parentX + childX, childYPositions[index])}
         </g>
       );
     });
@@ -963,6 +1345,49 @@ const ReleaseManagementTool: React.FC = () => {
         >
           <Plus className="w-4 h-4" />
           New Release
+        </button>
+      </div>
+      
+      {/* Status Tabs */}
+      <div className="flex items-center gap-2 mb-4 border-b">
+        <button
+          onClick={() => setFilterState(prev => ({ ...prev, selectedStatus: 'active' }))}
+          className={`px-4 py-2 font-medium transition-colors ${
+            filterState.selectedStatus === 'active' 
+              ? 'text-blue-600 border-b-2 border-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Active Releases
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100">
+            {savedReleases.filter(r => r.status === 'active').length}
+          </span>
+        </button>
+        <button
+          onClick={() => setFilterState(prev => ({ ...prev, selectedStatus: 'closed' }))}
+          className={`px-4 py-2 font-medium transition-colors ${
+            filterState.selectedStatus === 'closed' 
+              ? 'text-blue-600 border-b-2 border-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Closed Releases
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100">
+            {savedReleases.filter(r => r.status === 'closed').length}
+          </span>
+        </button>
+        <button
+          onClick={() => setFilterState(prev => ({ ...prev, selectedStatus: 'all' }))}
+          className={`px-4 py-2 font-medium transition-colors ${
+            filterState.selectedStatus === 'all' 
+              ? 'text-blue-600 border-b-2 border-blue-600' 
+              : 'text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          All Releases
+          <span className="ml-2 px-2 py-0.5 text-xs rounded-full bg-gray-100">
+            {savedReleases.length}
+          </span>
         </button>
       </div>
       
@@ -989,16 +1414,6 @@ const ReleaseManagementTool: React.FC = () => {
           <option value="patch">Patch</option>
           <option value="hotfix">Hotfix</option>
           <option value="beta">Beta</option>
-        </select>
-        
-        <select
-          value={filterState.selectedStatus}
-          onChange={(e) => setFilterState(prev => ({ ...prev, selectedStatus: e.target.value as 'active' | 'closed' | 'all' }))}
-          className="px-4 py-2 border rounded-lg"
-        >
-          <option value="all">All Status</option>
-          <option value="active">Active</option>
-          <option value="closed">Closed</option>
         </select>
         
         <div className="flex items-center gap-2">
@@ -1039,12 +1454,19 @@ const ReleaseManagementTool: React.FC = () => {
           </div>
         </div>
         
-        {/* Status Badge */}
-        <span className={`absolute top-2 right-2 px-2 py-1 text-xs rounded ${
-          release.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-        }`}>
-          {release.status}
-        </span>
+        {/* Status Badges */}
+        <div className="absolute top-2 right-2 flex gap-1">
+          <span className={`px-2 py-1 text-xs rounded ${
+            release.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+          }`}>
+            {release.status}
+          </span>
+          {release.isReopened && (
+            <span className="px-2 py-1 text-xs rounded bg-amber-100 text-amber-800 font-medium">
+              reopened
+            </span>
+          )}
+        </div>
       </div>
       
       {/* Card Content */}
@@ -1117,6 +1539,7 @@ const ReleaseManagementTool: React.FC = () => {
           ) : (
             <button
               onClick={() => {
+                setCurrentRelease(release);
                 setReopenFormData({ reason: '', resetProgress: false });
                 setModalState(prev => ({ ...prev, showReopenDialog: true }));
               }}
@@ -1125,6 +1548,268 @@ const ReleaseManagementTool: React.FC = () => {
               Reopen
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderCustomizationPanel = () => customizingNode && (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setCustomizingNode(null)}>
+      <div className="bg-white rounded-lg shadow-xl p-6 w-96" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Customize Node</h3>
+          <button
+            onClick={() => setCustomizingNode(null)}
+            className="p-1 hover:bg-gray-100 rounded"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setCustomizationOptions(prev => ({ ...prev, activeTab: 'visual' }))}
+            className={`flex-1 px-3 py-2 rounded ${
+              customizationOptions.activeTab === 'visual' 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            Visual
+          </button>
+          <button
+            onClick={() => setCustomizationOptions(prev => ({ ...prev, activeTab: 'properties' }))}
+            className={`flex-1 px-3 py-2 rounded ${
+              customizationOptions.activeTab === 'properties' 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'bg-gray-100 text-gray-700'
+            }`}
+          >
+            Properties
+          </button>
+        </div>
+
+        {customizationOptions.activeTab === 'visual' ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">Color</label>
+              <div className="grid grid-cols-6 gap-2">
+                {colorOptions.map(color => (
+                  <button
+                    key={color}
+                    onClick={() => {
+                      setCustomizationOptions(prev => ({ ...prev, selectedColor: color }));
+                      updateNodeById(currentRelease.nodes, customizingNode, { color });
+                      setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                    }}
+                    className={`w-10 h-10 rounded ${color} ${
+                      customizationOptions.selectedColor === color 
+                        ? 'ring-2 ring-offset-2 ring-blue-500' 
+                        : ''
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">Icon</label>
+              <div className="grid grid-cols-6 gap-2">
+                {Object.keys(releaseIcons).map(iconName => {
+                  const IconComponent = {
+                    Package, Rocket, Star, Target, Users, FileText,
+                    Folder, GitBranch, Code, Bug, CheckCircle, Shield,
+                    Zap, Crown, Diamond, Gift, Globe, Book
+                  }[iconName] || Package;
+                  
+                  return (
+                    <button
+                      key={iconName}
+                      onClick={() => {
+                        setCustomizationOptions(prev => ({ ...prev, selectedIcon: iconName }));
+                        updateNodeById(currentRelease.nodes, customizingNode, { icon: iconName });
+                        setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                      }}
+                      className={`w-10 h-10 rounded border flex items-center justify-center ${
+                        customizationOptions.selectedIcon === iconName 
+                          ? 'border-blue-500 bg-blue-50' 
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <IconComponent size={16} />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Priority</label>
+              <select
+                onChange={(e) => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  if (node) {
+                    node.properties.priority = e.target.value as PriorityLevel;
+                    setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg"
+              >
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Status</label>
+              <select
+                onChange={async (e) => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  if (node) {
+                    const oldStatus = node.properties.status;
+                    node.properties.status = e.target.value;
+                    setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                    
+                    // Auto-sync with GitHub if issue exists
+                    if (node.github_issue?.issue_number && currentRelease.id) {
+                      try {
+                        await apiClient.post(
+                          `/releases/${currentRelease.id}/nodes/${node.id}/sync-github`,
+                          { status: e.target.value }
+                        );
+                        console.log('GitHub issue synced automatically');
+                      } catch (error) {
+                        console.error('Failed to auto-sync with GitHub:', error);
+                        // Revert status on error
+                        node.properties.status = oldStatus;
+                        setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                        alert('Failed to sync status with GitHub. Status reverted.');
+                      }
+                    }
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg"
+                defaultValue={(() => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  return node?.properties.status || 'planning';
+                })()}
+              >
+                <option value="planning">Planning</option>
+                <option value="in-development">In Development</option>
+                <option value="testing">Testing</option>
+                <option value="ready-for-release">Ready for Release</option>
+                <option value="released">Released</option>
+                <option value="blocked">Blocked</option>
+                <option value="on-hold">On Hold</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Assignee</label>
+              <input
+                type="text"
+                onChange={(e) => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  if (node) {
+                    node.properties.assignee = e.target.value;
+                    setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg"
+                placeholder="Enter assignee name"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Description</label>
+              <textarea
+                onChange={(e) => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  if (node) {
+                    node.properties.description = e.target.value;
+                    setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                  }
+                }}
+                className="w-full px-3 py-2 border rounded-lg resize-none"
+                rows={3}
+                placeholder="Enter description"
+                defaultValue={(() => {
+                  const node = findNodeById(currentRelease.nodes, customizingNode);
+                  return node?.properties.description || '';
+                })()}
+              />
+            </div>
+
+            {/* GitHub Integration Section */}
+            {(() => {
+              const node = findNodeById(currentRelease.nodes, customizingNode);
+              if (node?.github_issue) {
+                return (
+                  <div className="border-t pt-3">
+                    <label className="block text-sm font-medium mb-2">GitHub Issue</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <a 
+                          href={node.github_issue.issue_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 text-blue-600 hover:text-blue-700"
+                        >
+                          <Github size={16} />
+                          <span>Issue #{node.github_issue.issue_number}</span>
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
+                      {node.github_issue.last_synced && (
+                        <div className="text-xs text-gray-500">
+                          Last synced: {new Date(node.github_issue.last_synced).toLocaleString()}
+                        </div>
+                      )}
+                      <button
+                        onClick={async () => {
+                          if (currentRelease.id && node) {
+                            try {
+                              const response = await apiClient.post(
+                                `/releases/${currentRelease.id}/nodes/${node.id}/sync-github`,
+                                { status: node.properties.status }
+                              );
+                              if (response.success) {
+                                // Update the last_synced timestamp
+                                node.github_issue!.last_synced = new Date().toISOString();
+                                setCurrentRelease(prev => ({ ...prev, nodes: [...prev.nodes] }));
+                                alert('GitHub issue synced successfully!');
+                              }
+                            } catch (error) {
+                              console.error('Failed to sync with GitHub:', error);
+                              alert('Failed to sync with GitHub');
+                            }
+                          }
+                        }}
+                        className="w-full px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center gap-2 text-sm"
+                      >
+                        <RefreshCw size={14} />
+                        Sync Status to GitHub
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={() => setCustomizingNode(null)}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Done
+          </button>
         </div>
       </div>
     </div>
@@ -1188,17 +1873,34 @@ const ReleaseManagementTool: React.FC = () => {
           </div>
         </div>
         
+        {saveError && (
+          <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+            {saveError}
+          </div>
+        )}
+        
         <div className="flex gap-2 mt-6">
           <button
             onClick={saveCurrentRelease}
-            disabled={!saveFormData.name || !saveFormData.version || !isValidVersion(saveFormData.version)}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={!saveFormData.name || !saveFormData.version || !isValidVersion(saveFormData.version) || isSaving}
+            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            Save
+            {isSaving ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving...
+              </>
+            ) : (
+              'Save'
+            )}
           </button>
           <button
-            onClick={() => setModalState(prev => ({ ...prev, showSaveDialog: false }))}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            onClick={() => {
+              setModalState(prev => ({ ...prev, showSaveDialog: false }));
+              setSaveError(null);
+            }}
+            disabled={isSaving}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1246,6 +1948,66 @@ const ReleaseManagementTool: React.FC = () => {
           </button>
           <button
             onClick={() => setModalState(prev => ({ ...prev, showCloseDialog: false }))}
+            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderReopenDialog = () => modalState.showReopenDialog && (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-xl p-6 w-96">
+        <h3 className="text-lg font-semibold mb-4">Reopen Release</h3>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Reason for reopening <span className="text-red-500">*</span></label>
+            <textarea
+              value={reopenFormData.reason}
+              onChange={(e) => setReopenFormData(prev => ({ ...prev, reason: e.target.value }))}
+              className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              rows={3}
+              placeholder="Why is this release being reopened? (e.g., additional features needed, bug fixes required)"
+              required
+            />
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="resetProgress"
+              checked={reopenFormData.resetProgress}
+              onChange={(e) => setReopenFormData(prev => ({ ...prev, resetProgress: e.target.checked }))}
+              className="rounded"
+            />
+            <label htmlFor="resetProgress" className="text-sm">
+              Reset all task progress to planning
+            </label>
+          </div>
+          
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+            <p className="text-sm text-amber-800">
+              <strong>Note:</strong> Reopening will change the release status back to "active" and document the reason in the status history.
+            </p>
+          </div>
+        </div>
+        
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={reopenRelease}
+            disabled={!reopenFormData.reason}
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Reopen Release
+          </button>
+          <button
+            onClick={() => {
+              setModalState(prev => ({ ...prev, showReopenDialog: false }));
+              setReopenFormData({ reason: '', resetProgress: false });
+            }}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
             Cancel
@@ -1374,6 +2136,7 @@ const ReleaseManagementTool: React.FC = () => {
         {/* Render all dialogs */}
         {renderSaveDialog()}
         {renderCloseDialog()}
+        {renderReopenDialog()}
         {renderDeleteConfirmation()}
       </div>
     );
@@ -1381,7 +2144,15 @@ const ReleaseManagementTool: React.FC = () => {
 
   // Editor view
   return (
-    <div className="w-full h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden">
+    <div 
+      className="w-full h-screen bg-gradient-to-br from-gray-50 to-gray-100 overflow-hidden"
+      style={{ cursor: panMode ? (isPanning ? 'grabbing' : 'grab') : 'default' }}
+      onWheel={handleWheel}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {/* Editor Header */}
       <div className="absolute top-4 left-4 z-10 bg-white rounded-lg shadow-lg p-4">
         <div className="flex items-center gap-4">
@@ -1402,6 +2173,15 @@ const ReleaseManagementTool: React.FC = () => {
           </div>
           
           <button
+            onClick={autoAlignNodes}
+            className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
+            title="Auto-align nodes to prevent overlap"
+          >
+            <Layers className="w-4 h-4" />
+            Auto-Align
+          </button>
+          
+          <button
             onClick={() => {
               setSaveFormData({
                 name: currentRelease.name,
@@ -1419,17 +2199,158 @@ const ReleaseManagementTool: React.FC = () => {
             <Save className="w-4 h-4" />
             Save
           </button>
+          
+          {/* GitHub Integration Button */}
+          {currentRelease.id && (
+            <>
+              <button
+                onClick={publishToGitHub}
+                disabled={isPublishing || !githubConfigured}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
+                  githubConfigured 
+                    ? 'bg-gray-900 text-white hover:bg-gray-800' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                } ${isPublishing ? 'opacity-50 cursor-wait' : ''}`}
+                title={
+                  !githubConfigured 
+                    ? `GitHub not configured. Set GITHUB_TOKEN, GITHUB_OWNER, and GITHUB_REPO${githubConfig?.type === 'enterprise' ? ', and GITHUB_ENTERPRISE_URL' : ''} in backend .env` 
+                    : `Publish all nodes as GitHub issues${githubConfig?.type === 'enterprise' ? ` (Enterprise: ${githubConfig.enterprise_url})` : ' (GitHub.com)'}`
+                }
+              >
+                {isPublishing ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Publishing...
+                  </>
+                ) : (
+                  <>
+                    <Github className="w-4 h-4" />
+                    Publish to GitHub
+                  </>
+                )}
+              </button>
+              
+              {/* GitHub Status Indicator */}
+              {githubConfig && (
+                <div className="flex items-center gap-2 px-3 py-1 text-xs bg-gray-100 rounded-lg">
+                  <div className={`w-2 h-2 rounded-full ${githubConfigured ? 'bg-green-500' : 'bg-red-500'}`} />
+                  {githubConfig.type === 'enterprise' ? (
+                    <span title={githubConfig.enterprise_url}>
+                      Enterprise: {githubConfig.owner}/{githubConfig.repo}
+                    </span>
+                  ) : (
+                    <span>
+                      GitHub.com: {githubConfig.owner}/{githubConfig.repo}
+                    </span>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        
+        {/* GitHub Status */}
+        {publishError && (
+          <div className="mt-2 p-2 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
+            {publishError}
+          </div>
+        )}
+      </div>
+
+      {/* Zoom and Pan Controls */}
+      <div className="absolute bottom-4 left-4 z-10 bg-white rounded-lg shadow-lg p-2">
+        <div className="flex items-center gap-2">
+          {/* Pan Controls */}
+          <button
+            onClick={() => setPanMode(!panMode)}
+            className={`p-2 rounded-lg transition-colors ${
+              panMode ? 'bg-blue-100 text-blue-600 hover:bg-blue-200' : 'hover:bg-gray-100'
+            }`}
+            title={panMode ? "Exit Pan Mode" : "Pan Mode (or hold Shift)"}
+          >
+            <Hand className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={() => setViewState(prev => ({ ...prev, panX: 0, panY: 0 }))}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Reset Pan Position"
+          >
+            <Move className="w-4 h-4" />
+          </button>
+          
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+          
+          {/* Zoom Controls */}
+          <button
+            onClick={handleZoomOut}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Zoom Out (Ctrl+Scroll)"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          
+          <div className="px-3 py-1 text-sm font-medium text-gray-700 min-w-[60px] text-center">
+            {Math.round(viewState.zoom * 100)}%
+          </div>
+          
+          <button
+            onClick={handleZoomIn}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Zoom In (Ctrl+Scroll)"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          
+          <div className="w-px h-6 bg-gray-300 mx-1" />
+          
+          <button
+            onClick={handleZoomReset}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Reset Zoom (100%)"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+          
+          <button
+            onClick={handleZoomFit}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Fit to Screen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        </div>
+        
+        {/* Instructions */}
+        <div className="mt-2 pt-2 border-t border-gray-200 text-xs text-gray-500">
+          <div className="flex gap-4">
+            <span>🖱️ Pan: {panMode ? 'Click & Drag' : 'Shift+Drag or Middle Mouse'}</span>
+            <span>🔍 Zoom: Ctrl+Scroll</span>
+          </div>
         </div>
       </div>
 
+      {/* Pan Instructions */}
+      {viewState.zoom !== 1 && (
+        <div className="absolute bottom-4 right-4 z-10 bg-black/70 text-white text-xs px-3 py-2 rounded-lg">
+          <div>Ctrl+Scroll: Zoom</div>
+          <div>Shift+Drag: Pan</div>
+        </div>
+      )}
+
       {/* Release Canvas */}
-      <div className="relative w-full h-full overflow-auto" ref={canvasRef}>
+      <div 
+        className="relative w-full h-full overflow-hidden" 
+        ref={canvasRef}
+        style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+      >
         <div 
           className="absolute" 
           style={{ 
             minWidth: `${canvasConfig.width}px`, 
             minHeight: `${canvasConfig.height}px`,
-            transform: `scale(${viewState.zoom}) translate(${viewState.panX}px, ${viewState.panY}px)`
+            transform: `scale(${viewState.zoom}) translate(${viewState.panX / viewState.zoom}px, ${viewState.panY / viewState.zoom}px)`,
+            transformOrigin: 'center center'
           }}
         >
           {/* Connection Lines */}
@@ -1478,8 +2399,10 @@ const ReleaseManagementTool: React.FC = () => {
       )}
 
       {/* Render all dialogs */}
+      {renderCustomizationPanel()}
       {renderSaveDialog()}
       {renderCloseDialog()}
+      {renderReopenDialog()}
       {renderDeleteConfirmation()}
     </div>
   );
