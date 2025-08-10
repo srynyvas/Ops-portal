@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layout } from './components/layout/Layout';
 import { Dashboard } from './components/dashboard/Dashboard';
 import { WorkflowManager } from './components/workflows/WorkflowManager';
-import { ReleaseManager } from './components/releases/ReleaseManager';
+import { IntegratedReleaseManager } from './components/releases';
 import { useAppConfig } from './hooks/useAppConfig';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -158,7 +158,7 @@ const App: React.FC = () => {
         case 'workflows':
           return <WorkflowManager viewState={viewState} onUpdateViewState={updateViewState} />;
         case 'releases':
-          return <ReleaseManager viewState={viewState} onUpdateViewState={updateViewState} />;
+          return <IntegratedReleaseManager />;
         case 'services':
         case 'pipelines':
         case 'monitoring':
